@@ -468,15 +468,21 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
                         if rolp(N, link_, R=1) > ave * rc:
                             node_ += [_R]; _R.fin = 1; _N.fin = 1
                             link_ += _R.L_; cent_ += _R.rC_
+                            
+    # from Fcluster:
+    # Link.nt is Fg
+    # Link.N_ is Fg's N_
+    # Link.L_ is Fg's L_
+    # Link.C_ is Fg's C_
     G_, in_ = [], set()
-    rN_ = {N for L in rL_ for N in L.nt}
+    rN_ = {N for L in rL_ for N in L.nt}  # for dN_, dL_ and dC_, rN_ is rL_?
     for n in rN_: n.fin = 0
     for N in rN_:  # form G per remaining rng N
         if N.fin or (root.root and not N.exe): continue  # no exemplars in Fcluster
         node_,cent_,Link_,_link_,B_ = [N],[],[],[],[]
         if rng==1 or not N.root or N.root==root:  # not rng-banded
             cent_ = N.rC_[:]  # c_roots
-            for l in N.rim:
+            for l in N.rim:  # for dN_ (mgraph), their rim is empty?
                 if l in rL_:
                     if val_(ett(l), aw=rc+1) > 0: _link_ += [l]
                     else: B_+= [l]  # rng-specific
@@ -911,7 +917,7 @@ def Fcluster(root, iL_, rc):  # called from cross_comp(Fg_)
     for Link in iL_: dN_ += Link.N_; dL_ += Link.L_; dC_ += Link.C_
 
     Et = np.zeros(3); N_L_C_ = [[],[],[]]
-    for i, (link_,clust, fC) in enumerate([(dN_,cluster_N,0),(dL_,cluster_N,0),(dC_,cluster_n,1)]):
+    for i, (link_,clust, fC) in enumerate([(dN_,cluster_N,0),(dL_,cluster_N,0),(dC_,cluster_n,1)]):  # dL_ has empty rim and dC_ is empty when call from vect_edge
         if link_:
             G = clust(root, link_, rc)
             if G:
