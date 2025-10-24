@@ -363,7 +363,7 @@ def rolp(N, _N_, R=0): # rel V of L_|N.rim overlap with _N_: inhibition|shared z
 def get_exemplars(N_, rc):  # get sparse nodes by multi-layer non-maximum suppression
 
     E_ = set()
-    for rdn, N in enumerate(sorted(N_, key=lambda n: n.em/n.en, reverse=True), start=1):  # strong-first
+    for rdn, N in enumerate(sorted(N_, key=lambda n: sum([l.m for l in n.rim]) / len(n.rim), reverse=True), start=1):  # strong-first
         roV = rolp(N, E_)
         if val_(N.eTT, rc+rdn+compw+roV) > 0:  # ave *= relV of overlap by stronger-E inhibition zones
             E_.update({n for l in N.rim for n in l.nt if n is not N and val_(n.eTT,rc) > 0})  # selective nrim
@@ -554,12 +554,12 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
             for n in root.N_: n._C_=n.rC_; n._mo_=n.mo_; n.rC_,n.mo_ = [],[]  # new n.rC_s, combine with vo_ in Ct_?
         else:  # converged
             break
-    C_ = [C for C in C_ if val_(C.DTT, aw=rc)]  # prune C_
+    C_ = [C for C in C_ if val_(C.DTT, rc)]  # prune C_
     if C_:
         for n in [N for C in C_ for N in C.N_]:
             n.exe = n.et[1-n.fi] + np.sum([mo[0] - ave*mo[1] for mo in n.mo_]) - ave  # exemplar V + summed n match_dev to Cs
             # m * ||C rvals?
-        if val_(DTT,1,(len(C_)-1)*Lw, rc+olp, root.dTT) > 0:
+        if val_(DTT,1,(len(C_)-1)*Lw, rc+olp, _dTT=root.dTT) > 0:
             cG = cross_comp(sum_N_(C_,rc,root), rc, fC=1)  # distant Cs, different attr weights?
         root.C_ = [cG.N_ if cG else C_, DTT]
 
@@ -587,7 +587,8 @@ def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, 
     C.DTT = np.zeros((2,9))  # init C.DTT
     return C
 
-def ett(L): return (L.nt[0].et + L.nt[1].et - L.Et*2) * intw + L.Et  # L.Et is twice included in ett
+# not sure
+def ett(L): return (L.nt[0].ett + L.nt[1].ett - L.dTT*2) * intw + L.dTT  # L.Et is twice included in ett
 
 def slope(link_):  # get ave 2nd rate of change with distance in cluster or frame?
 
@@ -727,22 +728,22 @@ def agg_frame(foc, image, iY, iX, rV=1, wTTf=[], fproj=0):  # search foci within
                 wTTf[0] *= 9 / mW; wTTf[1] *= 9 / dW
                 # re-norm weights
         if Fg and Fg.L_:
-            if fproj and val_(Fg.dTT,1, (len(Fg.N_)-1)*Lw, Fg.rc+compw):
+            if fproj and val_(Fg.dTT,Fg.rc+compw, mw=(len(Fg.N_)-1)*Lw, ):
                 pFg = proj_N(Fg, np.array([y, x]))
                 if pFg:
                     cross_comp(pFg, rc=Fg.rc)
-                    if val_(pFg.dTT,1,(len(pFg.N_)-1)*Lw, pFg.rc+contw):
+                    if val_(pFg.dTT,pFg.rc+contw,mw=(len(pFg.N_)-1)*Lw):
                         proj_focus(PV__, y,x, Fg)  # += proj val in PV__
             # no target proj
             frame = add_N(frame, Fg, fmerge=1, froot=1) if frame else Copy_(Fg)
             aw *= frame.rc
 
-    if frame.N_ and val_(frame.dTT, (len(frame.N_)-1)*Lw, frame.rc+compw) > 0:
+    if frame.N_ and val_(frame.dTT, frame.rc+compw, mw=(len(frame.N_)-1)*Lw) > 0:
         # recursive xcomp
         Fn = cross_comp(frame, rc=frame.rc + compw)
         if Fn: frame.N_ = Fn.N_; frame.dTT += Fn.dTT  # other frame attrs remain
         # spliced foci cent_:
-        if frame.C_ and val_(frame.C_[1], (len(frame.N_)-1)*Lw, frame.rc+centw) > 0:
+        if frame.C_ and val_(frame.C_[1], frame.rc+centw, mw=(len(frame.N_)-1)*Lw, ) > 0:
             Fc = cross_comp(frame, rc=frame.rc + compw, fC=1)
             if Fc: frame.C_ = [Fc.N_, Fc.dTT]; frame.dTT += Fc.dTT
         if not foc:
@@ -830,7 +831,7 @@ def proj_N(N, dist, A):  # recursively specified N projection, rim proj is curre
     m,d = N.m,N.d  # tentative eval?
     dec = rdist * (m / (m+d))  # match decay rate, * ddecay for ds?
     NH = proj_H(N.derH, cos_d, dec)
-    iV = val_(N.dTT, contw, mw=(len(N.N_)-1)*Lw)
+    iV = val_(N.dTT, contw, mw=(len(N.N_)-1)*Lw)  # rc = contw?
     pH = copy_(NH, N)
     if N.L_:  # from terminal comp
         LH = proj_H(N.dLay, cos_d, dec); add_dH(pH,LH)
@@ -900,9 +901,9 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
                 PPm_ = comp_slice(edge, rV, wTTf); Bg = CN(); lG = CN()
-                for PPm in PPm_: N=PP2N(PPm,Bg); add_N(lG, N, rc=1)
+                for PPm in PPm_: N=PP2N(PPm,Bg); add_N(Bg, N, rc=1)  # this should be Bg?
                 if edge.link_:
-                    for PPd in edge.link_: N=PP2N(PPd,lG); add_N(lG, N, rc=1)
+                    for PPd in edge.link_: N=PP2N(PPd,lG); add_N(lG, N, rc=1)  # right now add_N merge N.N into lG.N_, but we need lG.N_ += [N]?
                     Bg.rc+=lG.rc; Bg.lH+=[lG]+lG.nH; Bg.dTT+=lG.dTT; add_dH(Bg.derH,lG.derH)  # lH extension
                     form_B__(Bg,lG,2)
                     if val_(Bg.dTT,2, mw=(len(PPm_)-1)*Lw) > 0:
