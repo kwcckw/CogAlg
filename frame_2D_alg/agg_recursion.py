@@ -236,7 +236,7 @@ def comp_N_(iN_, rc, _iN_=[]):
             O = (N.rc +_N.rc) / 2; Ave = ave * rc * O
             V = proj_V(_N,N, dist, Ave, pVt_)
             if V > Ave:
-                Link = comp_N(_N,N, O+rc, A=dy_dx, span=dist)
+                Link = comp_N(_N,N, O+rc, A=dy_dx, span=dist); L_ += [Link]  # we need to pack this into L_ now
                 if Link.m > ave*(contw+O+rc) > 0:
                     N_ += [_N,N]; dTT += Link.dTT; olp += O
                 pVt_ += [[dist, dy_dx, _N, Link.m- ave*(rc+O)]]
@@ -252,9 +252,11 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # ext
     fi = N.fi
     angl = [A, np.sign(dTT[1] @ wTTf[1])]  # canonic direction
-    Link = CN(fi=0, nt=[_N,N], N_=_N.N_+N.N_, c=(N.c+_N.c)/2, baseT=baseT, yx=yx, box=box, span=span, angl=angl, rng=rng)
+    # we need to pack N.L_ too?
+    Link = CN(fi=0, nt=[_N,N], N_=_N.N_+N.N_, L_= N.L_+_N.L_, c=(N.c+_N.c)/2, baseT=baseT, yx=yx, box=box, span=span, angl=angl, rng=rng)
     V = val_(dTT,rc)
-    if fN and V * (1 - 1/ min(min(len(N.derH.H),len(_N.derH.H)),eps)) > ave:  # rdn to dTT, else derH is empty
+    # the second min should be max to select eps
+    if fN and V * (1 - 1/ max(min(len(N.derH.H),len(_N.derH.H)),eps)) > ave:  # rdn to dTT, else derH is empty
         H = [CdH(dTT=copy(dTT), root=Link)]; rc+=1  # + 2nd | higher layers:
         if _N.derH and N.derH:
             dH = comp_dH(_N.derH, N.derH, rn, Link); dtt = dH.dTT; H += dH.H
@@ -602,7 +604,7 @@ def Copy_(N, rc=1, root=None, init=0):
 
     C = CN(root=root)
     if init:  # new G
-        C.N_ = [N]; C.nH,C.lH = [],[]; C.yx = [N.yx]; C.angl = N.angl[0]  # to get mean
+        C.N_ = [N]; C.nH,C.lH = [],[]; C.yx = [N.yx]; C.angl[0] = N.angl[0]  # to get mean  (It should be C.angl[0] here? and why skipping dir to get mean?)
         if init==1:  # else centroid
             C.L_= [l for l in N.rim if l.m>ave]; N.root = C
             N.em, N.ed = val_(N.eTT,rc), val_(N.eTT,rc,fi=0)
@@ -618,8 +620,8 @@ def Copy_(N, rc=1, root=None, init=0):
 
 def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1,fC=0): # sum node,link attrs in graph, aggH in agg+ or player in sub+
 
-    G = Copy_(N_[0],root, init=fC+1)
-    G.rc=rc; G.rng=rng; G.N_,G.L_,G.C_,G.B_ = N_,L_,C_,B_; ang=np.zeros(2)
+    G = Copy_(N_[0],root=root, init=fC+1)
+    G.rc=rc; G.rng=rng; G.yx = [G.yx]; G.N_,G.L_,G.C_,G.B_ = N_,L_,C_,B_; ang=np.zeros(2)  # temporary convert yx to list
     for N in N_[1:]:
         add_N(G,N, rc, init=1, fC=fC, froot=not fC)  # no need for froot?
     for L in L_:
@@ -900,6 +902,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
                 PPm_ = comp_slice(edge, rV, wTTf)
+                # we need L_ in edge too? Else we do not have L.L_ for Fcluster later
                 Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None)  # increment rc?
                 if edge.link_:
                     lG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)
