@@ -49,6 +49,7 @@ class CdH(CBase):  # derivation hierarchy or a layer thereof, subset of CG
         d.H = kwargs.get('H',[])  # empty if single layer: redundant to Et,dTT
         d.dTT = kwargs.get('dTT', np.zeros((2,9)))  # m_,d_ [M,D,n, I,G,A, L,S,eA]: single layer or sum derH
         d.root = kwargs.get('root', [])  # to pass dTT
+        # d.depth = 0  # higher dimensional layer's depth
     def __bool__(d): return bool(np.any(d.dTT))  # n>0
 
 def copy_(dH, root):
@@ -186,6 +187,7 @@ def comp_C_(C_, rc, _C_=[], fall=1):  # max attr sort to constrain C_ search in 
             m_,d_ = dtt; ad_ = np.abs(d_); t_ = m_ + ad_ + eps  # ~ max comparand
             m,d,c = m_/t_ @ wTTf[0], ad_/t_ @ wTTf[1], min(_C.c,C.c)
             dC = CN(nt=[_C,C], m=m, d=d, c=c, dTT=dtt, span=np.hypot(*_C.yx-C.yx))
+            _C.rim += [dC]; C.rim += [dC]  # we need to manually add this rim now, to sum em in cross_comp later
             if   dC.m > ave*(contw+rc) > 0: mL_+=[dC]; mTT+=dC.dTT; out_ += [_C,C]
             elif dC.d > avd*(contw+rc) > 0: dL_+=[dC]; dTT+=dC.dTT  # not in out_?
     else:
@@ -266,7 +268,7 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
             rc+=1; _, ml_,mtt,dl_,dtt = comp_N_(_N.N_,rc, N.N_)  # cross-nt links only
             Link.L_ = ml_+dl_; dTT+=mtt+dtt; V=val_(dTT,rc)
         if fN:  # not Fg
-            if _N.B_ and N.B_:
+            if _N.B_ and N.B_ and isinstance(N.B_[0], list):  # form_B__ is not default, so N.B__ might be still flat when lG is empty
                 _B_,_btt,_bO = _N.B_; B_,btt,bO = N.B_; bO += _bO+rc; bTT =_btt+btt
                 if val_(bTT, bO+compw, fi=0, mw=(min(len(_B_),len(B_))-1) *Lw) > 0:
                     rc+=1; _, ml_,mtt,dl_,dtt = comp_N_(_B_,rc, B_)
@@ -462,7 +464,7 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
             for n in N_: olp += n.rc  # from Ns, vs. Et from Ls?
             for l in L_: dTT += l.dTT
             if val_(dTT, rc+olp, 1, (len(N_)-1)*Lw, root.dTT) > 0:
-                G_ += [sum_N_(N_, olp, root, L_, [C_,np.sum([c.DTT for c in C_],axis=0)] if C_ else [[],np.zeros(3)], list(set(B_)), rng)]
+                G_ += [sum_N_(N_, olp, root, L_, [C_,np.sum([c.DTT for c in C_],axis=0)] if C_ else [[],np.zeros((2,9))], list(set(B_)), rng)]  # .C_ should pack dTT instead of Et now
             elif n.fi:  # L_ is preserved anyway
                 for n in N_: n.sub += 1
                 G_ += N_
@@ -497,7 +499,7 @@ def cluster_n(root, iC_, rc):  # simplified flood-fill, currently for for C_ onl
             for n in N_: olp += n.rc  # from Ns, vs. Et from Ls?
             for l in L_: dTT += l.dTT
             if val_(dTT,rc+olp, mw=(len(N_)-1)*Lw,_dTT=root.dTT) > 0:
-                G_ += [sum_N_(N_, olp, root, L_,[C_,np.sum([c.DTT for c in C_],axis=0)] if C_ else [[],np.zeros(3)],list(set(B_)))]
+                G_ += [sum_N_(N_, olp, root, L_,[C_,np.sum([c.DTT for c in C_],axis=0)] if C_ else [[],np.zeros((2,9))],list(set(B_)))]
             elif n.fi:
                 G_ += N_
     if G_: return sum_N_(G_, rc, root)  # nG
