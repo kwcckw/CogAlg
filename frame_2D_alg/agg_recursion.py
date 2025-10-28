@@ -87,7 +87,9 @@ class CN(CBase):
         n.nt = kwargs.get('nt',[])  # nodet, empty if fi
         n.N_ = kwargs.get('N_',[])  # nodes, concat in links
         n.L_, n.B_, n.C_ = kwargs.get('L_',[]), kwargs.get('B_',[]), kwargs.get('C_',[])  # internal +links, external -links, root centroids
-        n.lG, n.bG, n.cG = kwargs.get('lG',CN()),kwargs.get('bG',CN()),kwargs.get('cG',CN())  # sum roots of L_,B_,C_, lH=lG.nH, cG in Fg only?
+        n.bG = kwargs.get('bG') if kwargs.get('bG') is not None else CN(bG=object, cG=object)  # we only need bG and cG now?
+        n.cG = kwargs.get('cG') if kwargs.get('cG') is not None else CN(bG=object, cG=object)
+        # n.lG, n.bG, n.cG = kwargs.get('lG',CN()),kwargs.get('bG',CN()),kwargs.get('cG',CN())  # sum roots of L_,B_,C_, lH=lG.nH, cG in Fg only?
         n.m,  n.d,  n.c  = kwargs.get('m',0), kwargs.get('d',0), kwargs.get('c',0)   # sum L_ dTT -> rm, rd, content count
         n.em, n.ed, n.ec = kwargs.get('em',0),kwargs.get('ed',0),kwargs.get('ec',0)  # sum rim TT
         n.rim = kwargs.get('rim', [])  # external links, rng-nest?
@@ -258,7 +260,7 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
             rc+=1; _,ml_,mtt, dl_,dtt = comp_N_(_N.N_,rc, N.N_)  # cross-nt links only
             Link.L_= ml_+dl_; TT+=mtt+dtt; V=val_(TT,rc)
         if _N.bG and N.bG:  # boundary roots
-            _B_,_bTT,_O, B_,bTT,O = _N.bG.N_,_N.bG.dTT,_N.bG.rc, N.bG.N_,N.bG.dTT,N.bG.rc; O+=_O+rc; TT = np.min(_bTT+bTT)
+            _B_,_bTT,_O, B_,bTT,O = _N.bG.N_,_N.bG.dTT,_N.bG.rc, N.bG.N_,N.bG.dTT,N.bG.rc; O+=_O+rc; TT = np.min([_bTT,bTT],axis=0)  # preserve array, and we sohuldn't sum them here?
             if val_(bTT, O+compw, fi=0, mw=(min(len(_B_),len(B_))-1)*Lw) > 0:
                 rc+=1; _,ml_,mtt, dl_,dtt = comp_N_(_B_,rc,B_)
                 Link.B_= ml_+dl_; TT+=mtt+dtt
@@ -266,7 +268,7 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
         _L_,L_ = _N.L_,_N.L_
         if V * (min(len(_L_),len(L_))-1)*Lw > ave*rc:  # add N.et,olp?
             rc+=1; _,ml_,mtt, dl_,dtt = comp_N_(_L_,rc,L_)
-            Link.lG= ml_+dl_; TT+=mtt+dtt; V=val_(TT,rc)  # higher links
+            Link.L_= ml_+dl_; TT+=mtt+dtt; V=val_(TT,rc)  # higher links  (why lG but not L_?)
         # also within Fg, but not between Gs?
         if Fg and _N.C_ and N.C_:
             _C_,_M = _N.C_; C_,M = N.C_
@@ -468,7 +470,7 @@ def cluster_n(root, iC_, rc):  # simplified flood-fill, currently for for C_ onl
             in_.add(L)
             for _N in L.nt:
                 if not _N.fin and _N in iC_:
-                    node_ += [_N]; cent_ += _N.rC_; _N.fin = 1
+                    node_ += [_N]; cent_ += _N.rC_; _N.fin = 1  # we still need rC_?
                     for l in _N.rim:
                         if l in in_: continue  # cluster by link+density:
                         if Lnt(l) > ave*rc: link_ += [l]
@@ -592,7 +594,7 @@ def Lnt(l): return ((l.nt[0].em + l.nt[1].em - l.m*2) * intw / 2 + l.m) / 2  # L
 def Copy_(N, rc=1, root=None, init=0):
 
     C = CN(root=root, dTT=deepcopy(N.dTT))
-    for attr in ['nt', 'baseT', 'box', 'rim', 'B_', 'rB_', 'C_', 'rC_']: setattr(C, attr, copy(getattr(N, attr)))
+    for attr in ['nt', 'baseT', 'box', 'rim', 'B_', 'C_']: setattr(C, attr, copy(getattr(N, attr)))
     for attr in ['m', 'd', 'c', 'em', 'ed', 'ec', 'rc', 'rng', 'fin', 'span', 'mang']: setattr(C, attr, getattr(N, attr))
     if N.derH: C.derH = copy_(N.derH,C)
     if init:  # new G
@@ -635,7 +637,7 @@ def add_N(N, n, rc, init=0, fC=0, froot=0):  # rn = n.n / mean.n
     N.span = (N.span*_cnt + n.span*cnt) / Cnt
     N.rc = (N.rc*_cnt + n.rc*cnt) / Cnt
     if n.nH: add_nH(N.nH,n.nH, N, rc)  # weight by Cnt?
-    if n.lH: add_nH(N.lH,n.lH, N, rc)
+    # if n.lH: add_nH(N.lH,n.lH, N, rc)  # for bG , we shouldn't merge them now?
     if init:  # N is G
         n.em, n.ed = val_(n.eTT,rc), val_(n.eTT,rc,fi=0); N.yx += [n.yx]
         N.angl = (N.angl*_cnt + n.angl[0]*cnt) / Cnt  # vect only
@@ -892,14 +894,14 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 PPm_ = comp_slice(edge, rV, wTTf)
                 Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None)  # increment rc?
                 if edge.link_:
-                    lG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)
-                    Edge.rc+=lG.rc; Edge.lH+=[lG]+lG.nH; Edge.dTT+=lG.dTT; add_dH(Edge.derH,lG.derH)  # lH extension
-                    form_B__(Edge,lG,3)
+                    bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)
+                    Edge.rc+=bG.rc; Edge.bG=bG; Edge.dTT+=bG.dTT; add_dH(Edge.derH,bG.derH)  # lH extension
+                    form_B__(Edge,bG,3)
                     if val_(Edge.dTT,3, mw=(len(PPm_)-1)*Lw) > 0:
                         trace_edge(Edge,3)  # cluster complemented Gs via G.B_
-                        if val_(lG.dTT,4, mw=(len(lG.N_)-1)*Lw):
-                            trace_edge(lG,4)  # for cross_comp in frame_H?
-                    Edge.L_ = lG.N_
+                        if val_(bG.dTT,4, mw=(len(bG.N_)-1)*Lw):
+                            trace_edge(bG,4)  # for cross_comp in frame_H?
+                    Edge.L_ = bG.N_
                 Edge_ += [Edge]
     return sum_N_(Edge_,2,None)  # Fg, no root
 
