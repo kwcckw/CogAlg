@@ -256,11 +256,11 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
         V = val_(TT,rc)  # refine
     if fi and N.L_:  # exclude lGs, PPs
         # spec comp x N_,B_,C_-> sub-links to sub-cluster
-        if V * (min(len(_N.N_),len(N.N_))-1)*Lw > ave*rc:
+        if V * (min(len(_N.N_),len(N.N_))-1)*Lw > ave*rc and isinstance(N.N_[0], CN) and isinstance(_N.N_[0], CN):  # stop when reaching the PPs level 
             rc+=1; _,ml_,mtt, dl_,dtt = comp_N_(_N.N_,rc, N.N_)  # cross-nt links only
             Link.L_= ml_+dl_; TT+=mtt+dtt; V=val_(TT,rc)
         if _N.Bt and N.Bt:  # boundary roots
-            _B_,_tt,_O, B_,tt,O = _N.bG.N_,_N.bG.dTT,_N.bG.rc, N.bG.N_,N.bG.dTT,N.bG.rc; O+=_O+rc
+            _B_,_tt,_O = _N.Bt; B_,tt,O = N.Bt; O+=_O+rc
             if min(val_(_tt,_O,0),val_(tt,O,0)) * ((min(len(_B_),len(B_))-1)*Lw) > ave:
                 rc+=1; _,ml_,mtt, dl_,dtt = comp_N_(_B_,rc,B_)
                 Link.B_= ml_+dl_; TT+=mtt+dtt
@@ -363,9 +363,9 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
     def deep_cluster(root, iL_, rc):  # called from cross_comp(Fg_)
 
         dN_, dL_, dC_ = [], [], []  # splice specs from links between Fgs within Fg cluster
-        for Link in iL_: dN_ += Link.L_; dL_ += Link.B_; dC_ += Link.C_  # spec sub-links
+        for Link in iL_: dN_ += Link.L_; dL_ += Link.B_; dC_ += Link.C_[0] if Link.C_ else []  # spec sub-links
 
-        N_L_C_ = [[],[],[]]; dTT = np.zeros((2,9)); c=0
+        N_L_C_ = [[],[],[]]; dTT = np.zeros((2,9)); c=0; nH = []
         for i, (link_,clust, fC) in enumerate([(dN_,cluster_N,0),(dL_,cluster_N,0),(dC_,cluster_n,1)]):
             if link_:
                 G = clust(root, link_, rc)
@@ -373,9 +373,11 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
                     rc+=1; N_L_C_[i] = G.N_; dTT += G.dTT
                     if val_(G.dTT, rc, mw=(len(G.N_)-1)*Lw) > 0:
                         G = cross_comp(G, rc, fC=fC)
-                        if G: N_L_C_[i] = G.N_; dTT += G.dTT; rc+=1; c += G.c
+                        if G: 
+                            N_L_C_[i] = G.N_; dTT += G.dTT; rc+=1; c += G.c
+                            if i == 0: nH = [G] + G.nH  # pack nH
         N_,L_,C_ = N_L_C_
-        return CN(dTT=dTT, m=sum(dTT[0]), d=sum(dTT[1]), c=c, rc=rc, N_=N_,L_=L_,C_=C_, root=root)
+        return CN(dTT=dTT, m=sum(dTT[0]), d=sum(dTT[1]), c=c, rc=rc, nH=nH, N_=N_,L_=L_,C_=C_, root=root)
         # combine 3 fork sub Gs?
     nG = []
     if iC or not root.root:  # input Fg, no exemplars or centroid clustering, not rng-banded, may call deep_cluster?
@@ -400,7 +402,7 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
             nG = cluster_n(root, C_,rc)  # in feature space if centroids
             if V > ave * contw:  # or higher filter
                 # draft sub-clustering via sub-links:
-                nG.nH += deep_cluster(nG, nG.L_, rc+1)
+                nG.nH = [deep_cluster(nG, nG.N_, rc+1)] + nG.nH  # L_ should be nG.N_ here to get N.L_, N.B_ and N.C_?
         if not nG: nG = CN(N_=C_,L_=L_)
     else:
         # primary centroid clustering
@@ -924,15 +926,16 @@ def form_B__(G, Bt):  # assign boundary / background per node from Bt tuple
         R_ = list({n.root for L in Bg.N_ for n in L.nt if n.root and n.root.root is not None}) # core Gs, exclude frame
         Bg.R_ = sorted(R_+[G], key=lambda x:(x.m/x.c), reverse=True)
 
-    def R(L): return L.root if L.root is None or L.root.root in Bt[0] else R(L.root)
+    def R(L): return L.root if L.root is None or L.root in Bt[0] else R(L.root)
 
     for N in G.N_:
         if N.sub or not N.B_: continue
         Bg_, dTT, rdn = [], np.zeros((2,9)), 0
         for L in N.B_:
             rB = R(L)  # replace boundary L with its root of the level that contains N in root.rB_?
-            if rB: Bg_ +=[rB]; dTT+=rB.dTT; rdn += rB.R_.index(N)+1  # n stronger cores of rB
-            if N not in rB.R_: rB.R_+= [N]  # reciprocal core
+            if rB:
+                Bg_ +=[rB]; dTT+=rB.dTT; rdn += rB.R_.index(N)+1  # n stronger cores of rB
+                if N not in rB.R_: rB.R_+= [N]  # reciprocal core
         N.Bt = [Bg_,dTT,rdn]
     G.Bt = Bt
 
@@ -942,8 +945,8 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     L_ = []; cT_ = set()  # comp pairs
     for N in N_: N.fin = 0
     for N in N_:
-        _N_ = [B for rB in N.rB_ if rB.B_ for B in rB.B_[0] if B is not N]
-        if N.B_: _N_ += [rB for B in N.B_[0] for rB in B.rB_ if rB is not N]
+        _N_ = [B for rB in N.R_ if rB.Bt for B in rB.Bt[0] if B is not N]
+        if N.Bt: _N_ += [rB for B in N.Bt[0] for rB in B.R_ if rB is not N]
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
