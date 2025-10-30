@@ -244,7 +244,7 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # ext
     fi = N.fi
     angl = [A, np.sign(TT[1] @ wTTf[1])]  # canonic direction
-    Link = CN(fi=0, nt=[_N,N], N_=_N.N_+N.N_, c=min(N.c,_N.c), baseT=baseT, yx=yx, box=box, span=span, angl=angl, rng=rng)
+    Link = CN(fi=0, nt=[_N,N], N_=_N.N_+N.N_, L_=_N.L_+N.L_, c=min(N.c,_N.c), baseT=baseT, yx=yx, box=box, span=span, angl=angl, rng=rng)  # we need L_ for spec later?
     V = val_(TT,rc)
     if not Fg and V * (1 - 1/ max( min(len(N.derH.H),len(_N.derH.H)), eps)) > ave:  # rdn to dTT, else derH is empty
         H = [CdH(dTT=copy(TT), root=Link)]; rc+=1  # + 2nd | higher layers:
@@ -364,21 +364,33 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
         dN_, dL_, dC_ = [], [], []  # splice specs from links between Fgs within Fg cluster
         for Link in iL_: dN_ += Link.L_; dL_ += Link.B_; dC_ += Link.C_  # spec sub-links
 
-        N_L_C_ = [[],[],[]]; dTT = np.zeros((2,9)); c=0; nH = []
+        N_L_C_ = [[],[],[]]; dTT = np.zeros((2,9)); c=0; nHt = [[],[],[]]
         for i, (link_,clust, fC) in enumerate([(dN_,cluster_N,0),(dL_,cluster_N,0),(dC_,cluster_n,1)]):
             if link_:
                 G = clust(root, link_, rc)
                 if G:
                     rc+=1; N_L_C_[i] = G.N_; dTT += G.dTT
                     if val_(G.dTT, rc, mw=(len(G.N_)-1)*Lw) > 0:
-                        G = cross_comp(G, rc, fC=fC)
-                        if G:
-                            N_L_C_[i] = G.N_; dTT += G.dTT; c += G.c
-                            if i == 0: nH = [G] + G.nH  # pack nH
+                        G = cross_comp(G, rc, fC=fC) or G  # preserve old G?
+                        N_L_C_[i] = G.N_; dTT += G.dTT; c += G.c
+                        nHt[i] = [G] + G.nH  # pack nH
         N_,L_,C_ = N_L_C_
         # sub_N tG via trans-N links: || nG,
         # sort 3 fork_tG_+ nG by V, rc+=i, may unpack nG, likely if nG is Fg
-        return CN(dTT=dTT, m=sum(dTT[0]), d=sum(dTT[1]), c=c, rc=rc, nH=nH, N_=N_,L_=L_,C_=C_, root=root)
+        H_ = []
+        for fi, H in zip((1, 0, 1),nHt):
+            if H:
+                H = sum_N_(H, rc, root)  # convert list of H into CN
+                for i, lay in enumerate(H.N_): lay.i = i  # init i index
+                i_ = []
+                for i, lay in enumerate(sorted(H.N_, key=lambda lay: [lay.m, lay.d][fi], reverse=True)):
+                    di = lay.i - i  # lay index in H
+                    lay.rc += di  # derR - valR
+                    i_ += [lay.i]
+                H.i_ = i_  # H priority indices: node/m | link/d
+            H_ += [H]  # pack Bt, Nt and Ct, where each of their N_ is a layer in nH
+            
+        return CN(dTT=dTT, m=sum(dTT[0]), d=sum(dTT[1]), rc=rc, N_ = H_, root=root)  # N packing each Nt, Bt abd Ct
 
     nG = []
     if iC or not root.root:  # input Fg, no exemplars or centroid clustering, not rng-banded, may call deep_cluster?
@@ -434,7 +446,7 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
             for _N in L.nt:
                 if _N.fin: continue
                 if not N.root or N.root == root or not N.L_:  # not rng-banded
-                    node_ += [_N]; cent_ += _N.rC_; _N.fin = 1
+                    node_ += [_N]; cent_ += _N.Ct.N_ if _N.Ct else []; _N.fin = 1
                     for l in _N.rim:
                         if l in in_: continue  # cluster by link+density:
                         if l in rL_:
@@ -445,22 +457,22 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
                     if _R and not _R.fin:
                         if rolp(N, link_, R=1) > ave * rc:
                             node_ += [_R]; _R.fin = 1; _N.fin = 1
-                            link_ += _R.L_; cent_ += _R.rC_
+                            link_ += _R.L_; cent_ +=  _R.Ct.N_ if _R.Ct else []
     G_, in_ = [], set()
     rN_ = {N for L in rL_ for N in L.nt}
     for n in rN_: n.fin = 0
     for N in rN_:  # form G per remaining rng N
-        if N.fin or (root.root and not N.exe): continue  # no exemplars in Fcluster
+        if N.fin or (root.root and root.root.root and not N.exe): continue  # no exemplars in Fcluster
         node_,cent_,Link_,_link_,B_ = [N],[],[],[],[]
         if rng==1 or not N.root or N.root==root:  # not rng-banded
-            cent_ = N.rC_[:]  # c_roots
+            if N.Ct: cent_ = N.Ct.N_[:]  # c_roots  (not sure, something like this?)
             for l in N.rim:
                 if l in rL_:
                     if Lnt(l) > ave*rc: _link_ += [l]
                     else: B_+= [l]  # rng-specific
         else: # N is rng-banded, cluster top-rng roots
             n = N; R = rroot(n)
-            if R and not R.fin: node_,_link_,cent_ = [R], R.L_[:], R.rC_[:]; R.fin = 1
+            if R and not R.fin: node_,_link_,cent_ = [R], R.L_[:], R.Ct.N_[:] if R.Ct else []; R.fin = 1
         N.fin = 1; link_ = []
         while _link_:
             Link_ += _link_
@@ -914,7 +926,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 PPm_ = comp_slice(edge, rV, wTTf)
                 Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None)  # increment rc?
                 if edge.link_:
-                    bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)
+                    bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge); Edge.L_ = bG.N_  # without bG assignment in Edge, we need to assign bG.N_ as Edge.L_ now?
                     B_,bTT,bO = bG.N_,bG.dTT,bG.rc  # simplify sum_N_?
                     form_B__(Edge,[B_,bTT,bO])  # adds Edge.Bt
                     if val_(Edge.dTT,3, mw=(len(PPm_)-1)*Lw) > 0:
