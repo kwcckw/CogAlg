@@ -58,7 +58,7 @@ class CN(CBase):
         n.em,n.ed,n.ec = kwargs.get('em',0),kwargs.get('ed',0),kwargs.get('ec',0)  # sum rim TT
         n.dTT = kwargs.get('dTT',np.zeros((2,9)))  # sum derH-> m_,d_ [M,D,n, I,G,a, L,S,A], L: dLen, S: dSpan
         n.eTT = kwargs.get('eTT',np.zeros((2,9)))  # sum rim derH
-        n.lev = kwargs.get('lev',CN())  # current, from L_?
+        n.lev = CN(lev=[]) if kwargs.get('lev') is None else []  # current, from L_?
         n.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,A: not ders, not in links?
         n.yx  = kwargs.get('yx', np.zeros(2))  # [(y+Y)/2,(x,X)/2], from nodet, then ave node yx
         n.rng = kwargs.get('rng',1)  # or med: loop count in comp_node_|link_
@@ -215,25 +215,27 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
         n.rim += [Link]; n.eTT += TT; n.ec += Link.c; n.compared.add(_n)  # or conditional n.eTT / rim later?
     return Link
 
-def comp_H(_H, H, rc, root, TT):  # unpack derH trees down to numericals and compare them
+def comp_H(_iH, iH, rc, root, TT):  # unpack derH trees down to numericals and compare them
 
-    TT += comp_derT(_H.dTT[1], H.dTT[1]*rc)  # default comp
-    dH = []
-    if val_(TT, rc+ 1/min(len(_H.H),len(H.H))) > 0:
-        if _H.H and H.H:  # >1 levs / H
-            for _lev,lev in zip(_H.H, H.H):
-                comp_H(_lev, lev, rc, root, TT)  # add to dTT only?
-        else:
-            # comp fork_, or one H and one fork_?
-            tt = np.zeros((2,9)); fork_ = [[],[],[]]  # or 6?
-            for i, (F,f) in enumerate(zip((_H.Nt,_H.Bt,_H.Ct), (H.Nt,H.Bt,H.Ct))):
-                if F and f:
-                    N_,L_,mTT,B_,dTT = comp_N_(F[0],rc,f[0]) if i<2 else comp_C_(F[0],rc,f[0])
-                    fTT = mTT + dTT; tt += fTT
-                    fork_[i] = [[N_,fTT]]  # do we need B_,L_ per fork?
-            TT += tt; dH += [[fork_,tt]]
-            # add fork_,dH sort and rc assign
-    return CN(H=dH, dTT=TT, root=root, rc=rc, m=sum(TT[0]), d=sum(TT[1]), c=min(_H.c, H.c))
+    dH = []; c = 0
+    for _H, H in zip(_iH, iH):
+        TT += comp_derT(_H.dTT[1], H.dTT[1]*rc)  # default comp
+        c += min(_H.c, H.c)
+        if val_(TT, rc+ 1/max(min(len(_H.H),len(H.H)),1) ) > 0:
+            if _H.H and H.H:  # >1 levs / H
+                for _lev,lev in zip(_H.H, H.H):
+                    comp_H(_lev, lev, rc, root, TT)  # add to dTT only?
+            else:
+                # comp fork_, or one H and one fork_?
+                tt = np.zeros((2,9)); fork_ = [[],[],[]]  # or 6?
+                for i, (F,f) in enumerate(zip((_H.Nt,_H.Bt,_H.Ct), (H.Nt,H.Bt,H.Ct))):
+                    if F and f:
+                        N_,L_,mTT,B_,dTT = comp_N_(F[0],rc,f[0]) if i<2 else comp_C_(F[0],rc,f[0])
+                        fTT = mTT + dTT; tt += fTT
+                        fork_[i] = [[N_,fTT]]  # do we need B_,L_ per fork?
+                TT += tt; dH += [[fork_,tt]]
+                # add fork_,dH sort and rc assign
+    return CN(H=dH, dTT=TT, root=root, rc=rc, m=sum(TT[0]), d=sum(TT[1]), c=c)
 
 def base_comp(_N,N, fC=0):  # comp Et, baseT, extT, dTT
 
@@ -355,7 +357,7 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
         if V > 0:
             nG = cluster_n(root, N_,rc)  # in feature space if centroids, no B_,C_?
             if V > ave * contw:  # higher filter to insert trans-N link_ clusters
-                tF_ = trans_cluster(nG, [l for n in nG.N_ for l in n.L_], rc+1)
+                tF_ = trans_cluster(nG, [l for n in nG.N_ for l in n.L_ if l], rc+1)  # we need if l to skip the list added by the hack
                 fork_,Nt_ = [],[]
                 # set rc in)between forks, may unpack nG, esp if nG is Fg:
                 for N_ in (nG.N_, nG.B_, nG.C_):
@@ -369,6 +371,10 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
                 for i, fork in enumerate(sorted(fork_, key=lambda f: f[0], reverse=True)):  # sort by m
                     fork[1][-1] += i  # both maxF and minF add the same i as rc?
                     fork[2][-1] += i
+            
+                for F, Nt in zip(fork_, (nG.Nt, nG.Bt, nG.Ct)):  # assign Nt, Bt and Ct
+                    if F: Nt[:] = F[1]  # assign maxF instead of minF?
+                
         if not nG: nG = CN(N_=N_,L_=L_)
     else:
         # primary centroid clustering
@@ -644,21 +650,20 @@ def add_N(N, n, rc, init=0, fC=0, froot=0):  # rn = n.n / mean.n
 # draft:
 def add_H(H, h):  # add rc = n/mean, no rev, merge/append lays
 
-    H.dTT += h.dTT
-    off_H = []
-    for Lev,lev in zip_longest(H.H, h.H):
-        if Lev and lev: add_H(Lev,lev)
-        elif lev:       off_H += [copy_(lev,H)]
-    # 6 [N_,dTT,m,d,c, rc] forks
-    for Fork, fork in zip(H.fork_, h.fork_):
-        Fork[0] += fork[0]  # concatenate m
-        Fork[1] += fork[1]  # add dTT
-        Fork[4] += fork[4]  # add c
-        Fork[5] += fork[5]  # add rc
-        Fork[2] = sum(Fork[1][0])  # recompute m  (would it be the same to sum m?)
-        Fork[3] = sum(Fork[1][1])  # recomptue d
+    for Lev,lev in zip_longest(H, h, fillvalue=None):
+        if Lev and lev: 
+            Lev.dTT += lev.dTT
+            # 6 [N_,dTT,m,d,c,rc] forks
+            for Fork, fork in zip((Lev.Nt, Lev.Bt, Lev.Ct), (lev.Nt, lev.Bt, lev.Ct)):
+                Fork[0] += fork[0]  # concatenate N_
+                Fork[1] += fork[1]  # add dTT
+                Fork[2] = sum(Fork[1][0])  # recompute m  (would it be the same to sum m?)
+                Fork[3] = sum(Fork[1][1])  # recomptue d
+                Fork[4] += fork[4]  # add c
+                Fork[5] += fork[5]  # add rc 
+            if Lev.H and lev.H: add_H(Lev.H,lev.H)  # add deeper H    
+        elif lev is None: H += [copy_(lev,Lev)]
 
-    H.H += off_H
     return H
 
 def extend_box(_box, box):
