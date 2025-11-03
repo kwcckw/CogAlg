@@ -127,7 +127,7 @@ def cross_comp(root, rc, fC=0, fT=0):  # rng+ and der+ cross-comp and clustering
             nG = root  # new boundary of old core
             nG.B_=dL_; nG.Bt = Bt  # [bG_,TT,m,d,c,rc]
     if nG:
-        return [nG.N_, nG.dTT, nG.rc] if fT else nG  # replaces root
+        return [nG.N_, nG.dTT, sum(nG.dTt[0]), sum(nG.dTT[1]), len(nG.N_), nG.rc] if fT else nG  # replaces root
 
 def comp_C_(C_, rc, _C_=[], fall=1):  # max attr sort to constrain C_ search in 1D, add K attrs and overlap?
 
@@ -206,7 +206,7 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
     angl = [A, np.sign(TT[1] @ wTTf[1])]  # canonic direction
     Link = CN(fi=0, nt=[_N,N], N_=_N.N_+N.N_, c=min(N.c,_N.c), baseT=baseT, yx=yx, box=box, span=span, angl=angl, rng=rng, rc=rc)
     # spec if not Fg or link or PP:
-    if N.root and N.fi and N.L_ and _N.L_ and val_(TT,rc) > 0:
+    if ((N.root and N.fi and N.L_ and _N.L_) or N.fi==3)  and val_(TT,rc) > 0:
         Link.lev = comp_sub(_N,N, rc,Link, TT)  # nested, no Link.H
     Link.dTT=TT; Link.m = val_(TT,rc); Link.d = val_(TT,rc,fi=0)  # added above
     for n, _n in (_N,N), (N,_N):  # if rim-mediated comp: reverse dir in _N.rim: rev^_rev?
@@ -230,7 +230,7 @@ def comp_sub(_N,N, rc, root, TT):  # unpack node trees down to numericals and co
             if F and f:
                 N_,L_,mTT,B_,dTT = comp_N_(F[0],rc,f[0]) if i<2 else comp_C_(F[0],rc,f[0])
                 fTT = mTT + dTT; tt += fTT
-                dfork_[i] = [N_,fTT]  # do we need B_,L_ per fork?
+                dfork_[i] = [N_,fTT,sum(fTT[0]),sum(fTT[1]),min(F[4], f[4]),F[5] +f[5]]  # do we need B_,L_ per fork?  (min of F and f's c as c? and sum of F and f as rc)
         TT += tt; Nt,Bt,Ct = dfork_; c = min(_N.c,N.c)
 
     root.c += c  # additive? fork_,dH sort and rc assign in cluster, not link?
@@ -354,19 +354,27 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
             tL_ = [l for n in nG.N_ for l in n.L_]  # trans-links?
             if sum(tL.m for tL in tL_) *((len(tL_)-1)*Lw) > ave*(rc+contw):
                 tF_ = trans_cluster(nG, tL_, rc+1)
-                F_= []
+                F_, Ft_= [], []
                 # below is just a draft
                 for n_ in (nG.N_, nG.B_, nG.C_):  # set rc in)between forks, may unpack nG, esp if nG is Fg
                     dtt = np.zeros((2,9)); c = 0; rc = 0
                     for n in n_: dtt += n.dTT; c += n.c; rc += n.rc
                     F_ += [[N_, dtt, np.sum(dtt[0]), np.sum(dtt[1]), c, rc]]
+                Ft_ = []
                 for F,tF in zip(F_, tF_):  # or Bt, Ct from cross_comp?
                     if F and tF:
                         maxF,minF = (F,tF) if F[2] > tF[2] else (tF,F)  # F[2] is m
-                        minF[-1] += 1; F_ += [[maxF[2], maxF,minF]]  # F[-1] is rc
-                for Ft in F_:
-                    Ft[1][-1] if Ft[1][0] < Ft[2][0] else Ft[1][-1] += 1
+                        minF[-1] += 1; Ft_ += [[maxF[2], maxF,minF]]  # F[-1] is rc  (should pack to Ft_ here, F_ is already packing F above)
+                
+                # the section below is redundant? We already have minF[-1] += 1 above
+                for Ft in Ft_: 
+                    if Ft[1][2] < Ft[2][2]: Ft[1][-1] += 1  # the thrid index is m?
+                    else:                   Ft[2][-1] += 1  # should be Ft[2]
                     # incr min m' rc
+                    
+                for Ft, Nt in zip(Ft_, (nG.Nt, nG.Bt, nG.Ct)):
+                    Nt[:] = Ft[1]  # temporary pack maxF as Ft
+            
         if not nG: nG = CN(N_=N_,L_=L_)
     else:
         # primary centroid clustering
@@ -639,7 +647,7 @@ def add_N(N, n, rc, init=0, fC=0, froot=0):  # rn = n.n / mean.n
     # no B_? if N is Fg: margin = Ns of proj max comp dist > distance to nearest frame point, for cross_comp between frames?
     return N
 
-# not revised:
+# not revised: (change to add_sub now?)
 def add_H(H, h):  # add rc = n/mean, no rev, merge/append lays
 
     for Lev,lev in zip_longest(H, h, fillvalue=None):
@@ -877,7 +885,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
                 PPm_ = comp_slice(edge, rV, wTTf)
-                Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None); Edge.L_ = [[]]  # a hack to trigger spec
+                Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None); Edge.fi = 3
                 if edge.link_:
                     bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)
                     B_,bTT,bO = bG.N_,bG.dTT,bG.rc  # simplify sum_N_?
@@ -905,7 +913,7 @@ def form_B__(G, Bt):  # assign boundary / background per node from Bt tuple
             if rB:
                 Bg_ +=[rB]; dTT+=rB.dTT; rdn += rB.R_.index(N)+1  # n stronger cores of rB
                 if N not in rB.R_: rB.R_+= [N]  # reciprocal core
-        N.Bt = [Bg_,dTT,rdn]
+        N.Bt = [Bg_,dTT,sum(dTT[0]), sum(dTT[1]), len(N.B_), rdn]  # c = len(N.B_?)
     G.Bt = Bt
 
 def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
