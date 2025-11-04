@@ -356,7 +356,8 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
                 tF_ = trans_cluster(nG, tL_, rc+1)
                 Ft_ = []  # [[F,tF]]
                 for n_, tF in zip((nG.N_, nG.B_, nG.C_), tF_):
-                    dtt = np.zeros((2,9)); c,rc = 0,0; for n in n_: dtt += n.dTT; c += n.c; rc += n.rc  # if no Fts yet?
+                    dtt = np.zeros((2,9)); c,rc = 0,0  # syntax error when for loop in behind
+                    for n in n_: dtt += n.dTT; c += n.c; rc += n.rc  # if no Fts yet?
                     Ft_ += [[N_, dtt, np.sum(dtt[0]), np.sum(dtt[1]), c,rc], tF]  # cis,trans fork pairs
                 mmax_ = []
                 for F,tF in Ft_:  # or Bt, Ct from cross_comp?
@@ -366,7 +367,7 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
                 sm_ = sorted(mmax_, reverse=True)
                 for m,Ft in zip(mmax_,Ft_): # +rdn in 3 fork pairs
                     rdn = sm_.index(m); Ft[0][-1] += rdn; Ft[1][-1] += rdn
-        if not nG: nG = CN(N_=N_,L_=L_)
+        if not nG: nG = sum_N_(N_, rc, root, L_)  # should be sum_N_ here?
     else:
         # primary centroid clustering
         N_ = list({N for L in iL_ for N in L.nt if N.em})  # newly connected only
@@ -759,7 +760,7 @@ def proj_sub(N, cos_d, dec, rc, pTT = np.zeros((2,9))):
     if N.H:
         for lev in N.H:
             pTT, V = proj_sub(lev, cos_d, dec, rc+1, pTT)  # unpack tuple
-            if V > ave or V < 0: return pTT, V
+            if V > ave or V < 0: return pTT, V  # when V>ave, skip the rest of lev and return?
     else:   # project forks
         for Ft in N.Nt, N.Bt, N.Ct:
             if Ft:
@@ -821,7 +822,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 if edge.link_:
                     bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)
                     B_,bTT,bO = bG.N_,bG.dTT,bG.rc  # simplify sum_N_?
-                    form_B__(Edge,[B_,bTT,bO])  # adds Edge.Bt
+                    form_B__(Edge,[B_,bTT,sum(bTT[0]), sum(bTT[1]), Edge.c, bO])  # adds Edge.Bt
                     if val_(Edge.dTT,3, mw=(len(PPm_)-1)*Lw) > 0:
                         trace_edge(Edge,3)  # cluster complemented Gs via G.B_
                         if val_(bTT,4, mw=(len(B_)-1)*Lw):
@@ -845,7 +846,7 @@ def form_B__(G, Bt):  # assign boundary / background per node from Bt tuple
             if rB:
                 Bg_ +=[rB]; dTT+=rB.dTT; rdn += rB.R_.index(N)+1  # n stronger cores of rB
                 if N not in rB.R_: rB.R_+= [N]  # reciprocal core
-        N.Bt = [Bg_,dTT,sum(dTT[0]), sum(dTT[1]), sum(b.c for b in N.B_), rdn]
+        N.Bt = [Bg_,dTT,sum(dTT[0]), sum(dTT[1]), sum(b.c for b in N.B_) if isinstance(N.B_[0], CN) else len(N.B_), rdn]  # B_ could be CP for PPs, so they do not have c, use length of B_?
     G.Bt = Bt
 
 def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
