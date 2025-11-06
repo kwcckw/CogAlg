@@ -104,7 +104,7 @@ def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
             prim_,lrim_ = set(),set()
             for _P,_link in zip(_prim_,_lrim_):
                 if _P.fin: continue
-                if [_link.m, _link.d][fd] > [ave,avd][fd]:  
+                if [_link.m, _link.d][fd] > [ave,avd][fd]:
                     _P_.add(_P); link_.add(_link)
                     verT += _link.verT
                     if fd: _m, _d, _c = _P.m, _P.d, _P.c

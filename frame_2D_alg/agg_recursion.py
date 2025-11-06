@@ -358,7 +358,7 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
                 for n_, tF in zip((nG.N_, nG.B_, nG.C_), tF_):
                     dtt = np.zeros((2,9)); c,rc = 0,0  # if no Fts yet?
                     for n in n_: dtt += n.dTT; c += n.c; rc += n.rc
-                    Ft_ += [[[N_, dtt, np.sum(dtt[0]), np.sum(dtt[1]), c,rc], tF]]  # cis,trans fork pairs (we need extra bracket here to pack it as new list)
+                    Ft_ += [[[N_, dtt, np.sum(dtt[0]), np.sum(dtt[1]), c,rc], tF]]  # cis,trans fork pairs
                 mmax_ = []
                 for F,tF in Ft_:  # or Bt, Ct from cross_comp?
                     if F and tF:
@@ -452,7 +452,7 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
         if N.fin or (root.root and not N.exe): continue  # no exemplars in Fg
         node_,cent_,Link_,_link_,B_ = [N],[],[],[],[]
         if rng==1 or not N.root or N.root==root:  # not rng-banded
-            cent_ = N.C_[:]  # c_roots  (should be C_?)
+            cent_ = [C.root for C in N.C_]
             for l in N.rim:
                 if l in rL_:  # curr rng
                     if Lnt(l) > ave*rc: _link_ += [l]
@@ -767,7 +767,11 @@ def proj_sub(N, cos_d, dec, rc, pTT = np.zeros((2,9))):
                     fTT = fork[1]; pTT += np.array([fTT[0]*dec, fTT[1]*cos_d*dec]); V = val_(pTT, rc)
                     if abs(V) > ave: return pTT,V
     return pTT,V
-
+'''
+    replace projected match with uncertainty?
+    dec_r = ave_r + (r - ave_r) * (ave_r ** (distance / N.span))
+    uncertainty(d) = 4 * (dec_r(d) - ave_r) * (r - dec_r(d)) / (r - ave_r)²
+'''
 def proj_N(N, dist, A, rc):  # recursively specify N projection val, add pN if comp_pN?
 
     rdist = dist / N.span   # internal x external angle:
