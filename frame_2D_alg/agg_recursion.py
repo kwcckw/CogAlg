@@ -50,7 +50,7 @@ class CN(CBase):
         n.nt = kwargs.get('nt',[])  # nodet, empty if fi
         n.rc = kwargs.get('rc', 1)  # redundancy to ext Gs, ave in links? separate rc for rim, or internally overlapping?
         # under review:
-        n.H  = kwargs.get('H', [])  # top-down node H, mapping to bottom-up der H, empty if single level dTT,forks:
+        n.H, n,bH, n.cH = kwargs.get('H', []), kwargs.get('bH', []), kwargs.get('cH', [])  # top-down node H, mapping to bottom-up der H, empty if single level dTT,forks:
         n.Nt,n.Bt,n.Ct = kwargs.get('Bt',[]), kwargs.get('Bt',[]), kwargs.get('Ct',[])  # roots | fork_: [G_,TT,m,d,c,rdn], empty if H
         # nodes, dlinks, centroids (in Nt,Bt,Ct if fork_), mlinks, reciprocal roots:
         n.N_,n.B_,n.C_, n.L_,n.R_ = kwargs.get('N_',[]),kwargs.get('B_',[]),kwargs.get('C_',[]),kwargs.get('L_',[]),kwargs.get('R_',[])
@@ -779,46 +779,6 @@ def proj_N(N, dist, A, rc):  # arg rc += N.rc+contw, recursively specify N proje
     uncertainty = 4 * (dec_r - ave_r) * (r - dec_r) / (r - ave_r)**2
     '''
     
-    # This section is temporary
-    ave_r = 10
-    r = 5
-
-    dec_r_ = []
-    uncertainty_ = []
-    
-    v1 = (r*10) 
-    v2 = int(((r+ave_r)/2)*10) 
-    
-    low_value = v1 if v1<v2 else v2
-    high_value = v1 if v1>v2 else v2
-
-    for dec_r in range(low_value-30, high_value+30,   1):
-        dec_r/=10
-        uncertainty = 4 * (dec_r - ave_r) * (r - dec_r) / (r - ave_r)**2
-        dec_r_ += [dec_r]
-        uncertainty_ += [uncertainty]
-    
-    from matplotlib import pyplot as plt
-    
-    plt.figure()
-    plt.plot(dec_r_, uncertainty_)
-    plt.xlabel("dec_r")
-    plt.ylabel("uncertainty")
-    plt.grid()
-    
-    # max uncertainty, mid point between r and ave_r
-    plt.axvline(x=(r+ave_r)/2, color='r', linestyle='--', linewidth=2)
-    plt.text(((r+ave_r)/2)+0.1, 0.7, "(r+ave_r)/2", rotation=0, color='black', va='center', fontsize=34)
-    
-    # r
-    plt.axvline(x=r, color='b', linestyle='--', linewidth=2)
-    plt.text(r+0.1, 0.1, "r", rotation=0, color='black', va='center', fontsize=34)
-    
-    # ave_r
-    plt.axvline(x=ave_r, color='b', linestyle='--', linewidth=2)
-    plt.text(ave_r+0.1, 0.1, "ave_r", rotation=0, color='black', va='center', fontsize=34)
-    
-    
     rdist = dist / N.span   # internal x external angle:
     cos_d = (N.angl[0].dot(A) / (np.hypot(*N.angl[0]) * dist)) * N.angl[1]  # N-to-yx alignment
     m,d = N.m,N.d  # tentative
@@ -886,9 +846,11 @@ def form_B__(G, Bt):  # assign boundary / background per node from Bt tuple
             rB = R(L)  # replace boundary L with its root of the level that contains N in root.R_?
             if rB:
                 Bg_ +=[rB]; dTT+=rB.dTT; rdn += rB.R_.index(N)+1  # n stronger cores of rB
-                if N not in rB.R_: rB.R_+= [N]  # reciprocal core
-        N.Bt = [Bg_,dTT,sum(dTT[0]), sum(dTT[1]), sum(b.c for b in N.B_), rdn]
-    G.Bt = Bt
+                if N not in rB.R_: rB.R_+= [N]  # reciprocal core 
+        bt = [Bg_,dTT,sum(dTT[0]), sum(dTT[1]), sum(b.c for b in N.B_), rdn]
+        N.bH += [bt]; N.Bt = bt
+    G.bH += [Bt]; G.Bt = Bt
+    
 
 def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
 
