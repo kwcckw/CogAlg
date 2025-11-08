@@ -602,8 +602,8 @@ def copy_(H, root):  # simplified
 def Copy_(N, rc=1, root=None, init=0):
 
     C = CN(root=root, dTT=deepcopy(N.dTT))
-    for attr in ['nt', 'baseT', 'box', 'rim', 'B_', 'Bt', 'C_', 'Ct', 'R_']: setattr(C, attr, copy(getattr(N, attr)))
-    for attr in ['m','d','c','em','ed','ec','rc','rng','fin','span','mang']: setattr(C, attr, getattr(N, attr))
+    for attr in ['nt', 'baseT', 'box', 'rim', 'B_', 'Bt', 'C_', 'Ct', 'R_']: setattr(C, attr, copy(getattr(N, attr))) if hasattr(C, attr) else None  # added if check to compatible with both CN and Cn
+    for attr in ['m','d','c','em','ed','ec','rc','rng','fin','span','mang']: setattr(C, attr, getattr(N, attr)) if hasattr(C, attr) else None
     if init: # new G
         C.N_ = [N]; C.H = copy(N.H); C.yx = [N.yx]; C.angl = N.angl[0]  # to get mean (H should copy N.H now even with init?)
         if init==1:  # else centroid
@@ -617,7 +617,7 @@ def Copy_(N, rc=1, root=None, init=0):
 def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1,fC=0): # sum node,link attrs in graph, aggH in agg+ or player in sub+
 
     G = Copy_(N_[0],rc, root, init=fC+1)
-    G.rc=rc; G.rng=rng; G.N_,G.L_,G.C_,G.B_ = N_,L_,C_,B_; ang=np.zeros(2)
+    G.rc=rc; G.rng=rng; G.N_,G.L_,G.Ct,G.Bt = N_,L_,C_,B_; ang=np.zeros(2)
     for N in N_[1:]:
         add_N(G,N, rc, init=1, fC=fC, froot=not fC)  # no need for froot?
     for L in L_:
@@ -638,7 +638,7 @@ def add_N(N, n, rc, init=0, fC=0, froot=0):  # rn = n.n / mean.n
         Par += par  # extensive params, scale with c
     _cnt,cnt = N.c,n.c; Cnt = _cnt+cnt
     # weigh contribution of intensive params:
-    add_sub(N, n)  # H or Nt,Bt,Ct
+    if hasattr(N, 'H'): add_sub(N, n)  # H or Nt,Bt,Ct
     N.mang = (N.mang*_cnt + n.mang*cnt) / Cnt
     N.span = (N.span*_cnt + n.span*cnt) / Cnt
     N.rc = (N.rc*_cnt + n.rc*cnt) / Cnt
@@ -651,8 +651,18 @@ def add_N(N, n, rc, init=0, fC=0, froot=0):  # rn = n.n / mean.n
         for node in n.N_: node.root = N; N.N_ += [node]
         A,a = N.angl[0],n.angl[0]; A[:] = (A*_cnt+a*cnt) / Cnt
         N.L_ += n.L_; N.rim += n.rim  # no L.root, rims can't overlap?
-    n.C_ += [C for C in n.C_ if C not in N.C_]  # centroids, not in root Ct
-    n.B_ += [B for B in n.B_ if B not in N.B_]  # high-diff links, not in root Bt?
+    if n.Ct:
+        if isinstance(N.Ct[0], CN):  # not lev
+            N.Ct = list(set(N.Ct + n.Ct))
+        else:  # lev
+            for C, c in zip_longest(N.Ct, n.Ct, fill_value=None):
+                if c is not None:
+                    if C is not None: add_sub(C, c)
+                    else:             N.Ct += [Copy_(c, N)]
+        # same for Bt?
+        
+    # N.Ct_ += [C for C in n.C_ if C not in N.C_]  # centroids, not in root Ct
+    # N.Bt_ += [B for B in n.B_ if B not in N.B_]  # high-diff links, not in root Bt?
     # if N is Fg: margin = Ns of proj max comp dist > min _Fg point dist: cross_comp Fg_?
     if fC:
         n.rc = np.sum([mo[1] for mo in n._mo_]); N.rC_ += n.rC_; N.mo_ += n.mo_
@@ -668,10 +678,22 @@ def add_sub(N, n):  # add n.H | n.Nt,n.Bt,n.Ct to N, analogous to comp_sub
             elif lev:
                 N.H += [copy_(lev, N)]
     else: # single lev not in H
-        for Ft, ft in zip((N.Nt, N.Bt, N.Ct), (n.Nt, n.Bt, n.Ct)):
+        for Ft, ft in zip((N.zN_(), N.Bt, N.Ct), (n.zN_(), n.Bt, n.Ct)):
             if ft:
-                if len(ft) > 2: Ft = [Ft]; ft = [ft]  # nest if cis-forks only
-                for Fork, fork in zip(Ft, ft):
+                if len(ft) > 2: Ft = [Ft]; ft = [ft]  # nest if cis-forks only  
+                for Fork, fork in zip_longest(Ft, ft, fillvalue=None):
+                    if fork is not None:
+                        if not hasattr(fork, 'H'): continue  # skip CP, not sure if there's a betetr method?
+                        if Fork is not None:
+                            add_sub(Fork, fork)
+                            Ft.N_ += ft.N_; Ft.L_ += ft.L_; Ft.R_ += ft.R_
+                            Ft.dTT += ft.dTT
+                            Ft.m += ft.m; Ft.d += ft.d; Ft.c += ft.c          
+                            Ft.rc = (Ft.rc*Ft.c + ft.rc*ft.c) / (Ft.c + ft.c)
+                        else:
+                            Fork += [Copy_(fork, N)]  # pack new level
+                    
+                    '''
                     N_,dTT,_,_,c,rc = fork; _,_,_,_,_c,_rc = Fork
                     Fork[0] += N_
                     Fork[1] += dTT
@@ -679,6 +701,7 @@ def add_sub(N, n):  # add n.H | n.Nt,n.Bt,n.Ct to N, analogous to comp_sub
                     Fork[3] = sum(dTT[1])  # recompute d
                     C =_c+c; Fork[4] += C
                     Fork[5] = (_rc*_c + rc*c) / C  # weigh rc
+                    '''
 
 def extend_box(_box, box):
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
@@ -714,7 +737,7 @@ def PP2N(PP):
                      np.array([dM, dD, dL, dI, dG, dA, dL, dL / 2, eps])])
     y,x,Y,X = box; dy,dx = Y+1-y, X+1-x
     A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
-    PP = CN(fi=2, N_=P_,B_=B_, m=m,d=d,c=c, baseT=baseT, dTT=dTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
+    PP = CN(fi=2, N_=P_,Bt=B_, m=m,d=d,c=c, baseT=baseT, dTT=dTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
     for P in PP.N_: P.root = PP
     return PP
 
@@ -848,23 +871,28 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 Edge_ += [Edge]
     return sum_N_(Edge_,2,None)  # Fg, no root
 
-def form_B__(G, Bt):  # assign boundary / background per node from Bt tuple
+def form_B__(G, BT):  # assign boundary / background per node from Bt tuple
 
-    for Bg in Bt[0]:  # add R_ per boundary graph, in Fg?
+    for Bg in BT[0]:  # add R_ per boundary graph, in Fg?
         R_ = list({n.root for L in Bg.N_ for n in L.nt if n.root and n.root.root is not None}) # core Gs, exclude frame
-        Bg.R_ = sorted(R_+[G], key=lambda x:(x.m/x.c), reverse=True)
+        # add to Bg.H[-1].R_ ?
+        # Bg.R_ = sorted(R_+[G], key=lambda x:(x.m/x.c), reverse=True)
 
     def R(L): return L.root if L.root is None or L.root in Bt[0] else R(L.root)
 
     for N in G.N_:
-        if N.sub or not N.B_: continue
+        if N.sub or not N.Bt: continue
+        Bt = Cn()
         Bg_, dTT, rdn = [], np.zeros((2,9)), 0
-        for L in N.B_:
+        for L in N.Bt:
             rB = R(L)  # replace boundary L with its root of the level that contains N in root.R_?
             if rB:
                 Bg_ +=[rB]; dTT+=rB.dTT; rdn += rB.R_.index(N)+1  # n stronger cores of rB
                 if N not in rB.R_: rB.R_+= [N]  # reciprocal core
-        N.Bt = [Bg_,dTT,sum(dTT[0]), sum(dTT[1]), sum(b.c for b in N.B_), rdn]
+        Bt.N_ += Bg_; Bt.dTT += dTT; Bt.m += sum(dTT[0]); Bt.d += sum(dTT[1]); Bt.c = sum(b.c for b in N.Bt)
+        N.Bt = Bt
+        
+    # this assignment can be done outside form_B__ now?
     G.Bt = Bt
 
 def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
