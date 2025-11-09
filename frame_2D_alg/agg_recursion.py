@@ -79,17 +79,18 @@ class Cn(CBase):  # light CN for non-locals: H levels, Bt, Ct, nG, Bt?
     name = "Nt"
     def __init__(n, **kwargs):
         super().__init__()
-        n.H = kwargs.get('H', [])  # empty if N_, only for nested root H levels
-        n.N_, n.L_ = kwargs.get('N_',[]),kwargs.get('L_',[])  # principals
+        # n.H = kwargs.get('H', [])  # empty if N_, only for nested root H levels
+        # n.N_, n.L_ = kwargs.get('N_',[]),kwargs.get('L_',[])  # principals
         n.dTT = kwargs.get('dTT',np.zeros((2,9)))  # separate N_,L_ TTs?
         n.m,  n.d, n.c = kwargs.get('m',0), kwargs.get('d',0), kwargs.get('c',0)  # sum dTT
-        n.B_, n.C_, n.R_ = kwargs.get('B_', []), kwargs.get('C_', []), kwargs.get('R_', [])  # sub-forks?
+        n.R_ =  kwargs.get('R_', [])
+        # n.B_, n.C_, n.R_ = kwargs.get('B_', []), kwargs.get('C_', []), kwargs.get('R_', [])  # sub-forks?
         n.rc = kwargs.get('rc',1)  # redundancy
         n.root = kwargs.get('root', None)  # immediate
 
-    def zN_(n):  # get 1st level N_
-        return n.N_ if n.N_ else n.H[0].zN_()
-    def __bool__(n): return bool(n.N_) ^ bool(n.H)
+    # def zN_(n):  # get 1st level N_
+    #     return n.N_ if n.N_ else n.H[0].zN_()
+    def __bool__(n): return bool(n.R_)
     # is_H(n: Cn) := bool(n.H); is_leaf(n: Cn) := bool(n.N_)
 
 ave, avd, arn, aI, aS, aveB, aveR, Lw, intw, compw, centw, contw = .3, .2, 1.2, 100, 5, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
@@ -143,15 +144,16 @@ def cross_comp(root, rc, fC=0, fT=0):  # rng+ and der+ cross-comp and clustering
         elif Bt:
             nG=root; nG.B_=dL_; nG.Bt=Bt  # new boundary of old core
     if nG:
-        return [nG.N_, nG.dTT, sum(nG.dTT[0]), sum(nG.dTT[1]), sum(n.c for n in nG.N_), nG.rc] if fT else nG  # replaces root
+        # or return nG.Bt if fT?
+        return Cn(R_=nG.N_,dTT=nG.dTT,m=sum(nG.dTT[0]),d=sum(nG.dTT[1]),c=sum(n.c for n in nG.N_),rc=nG.rc,root=nG) if fT else nG  # replaces root
 
 def form_B__(G, Bt):  # assign boundary / background per node from Bt tuple
 
-    for Bg in Bt[0]:  # add R_ per boundary graph, in Fg?
+    for Bg in Bt.R_:  # add R_ per boundary graph, in Fg?
         R_ = list({n.root for L in Bg.N_ for n in L.nt if n.root and n.root.root is not None}) # core Gs, exclude frame
         Bg.R_ = sorted(R_+[G], key=lambda x:(x.m/x.c), reverse=True)
 
-    def R(L): return L.root if L.root is None or L.root in Bt[0] else R(L.root)
+    def R(L): return L.root if L.root is None or L.root in Bt.R_ else R(L.root)
 
     for N in G.N_:
         if N.sub or not N.B_: continue
@@ -161,7 +163,7 @@ def form_B__(G, Bt):  # assign boundary / background per node from Bt tuple
             if rB:
                 Bg_ +=[rB]; dTT+=rB.dTT; rdn += rB.R_.index(N)+1  # n stronger cores of rB
                 if N not in rB.R_: rB.R_+= [N]  # reciprocal core
-        N.Bt = [Bg_,dTT,sum(dTT[0]), sum(dTT[1]), sum(b.c for b in N.B_), rdn]
+        N.Bt = Cn(R_=Bg_,dTT=dTT,m=sum(dTT[0]),d=sum(dTT[1]),c=sum(b.c for b in N.B_),rc=rdn,root=N)
     G.Bt = Bt
 
 def comp_C_(C_, rc, _C_=[], fall=1):  # max attr sort to constrain C_ search in 1D, add K attrs and overlap?
@@ -619,8 +621,9 @@ def copy_(H, root):  # simplified
 def Copy_(N, rc=1, root=None, init=0):
 
     C = CN(root=root, dTT=deepcopy(N.dTT))
-    for attr in ['nt', 'baseT', 'box', 'rim', 'B_', 'Bt', 'C_', 'Ct', 'R_']: setattr(C, attr, copy(getattr(N, attr)))
+    for attr in ['nt', 'baseT', 'box', 'rim', 'B_', 'C_', 'R_']: setattr(C, attr, copy(getattr(N, attr)))
     for attr in ['m','d','c','em','ed','ec','rc','rng','fin','span','mang']: setattr(C, attr, getattr(N, attr))
+    for attr in ['Bt','Ct']: setattr(C, attr, Copy_(getattr(N, attr)))
     if init: # new G
         C.N_ = [N]; C.H = copy(N.H); C.yx = [N.yx]; C.angl = N.angl[0]  # to get mean (H should copy N.H now even with init?)
         if init==1:  # else centroid
@@ -685,17 +688,15 @@ def add_sub(N, n):  # add n.H | n.Nt,n.Bt,n.Ct to N, analogous to comp_sub
             elif lev:
                 N.H += [copy_(lev, N)]
     else: # single lev not in H
-        for Ft, ft in zip((N.Nt, N.Bt, N.Ct), (n.Nt, n.Bt, n.Ct)):
+        for Ft, ft in zip((N.Bt, N.Ct), (n.Bt, n.Ct)):
             if ft:
-                if len(ft) > 2: Ft = [Ft]; ft = [ft]  # nest if cis-forks only
-                for Fork, fork in zip(Ft, ft):
-                    N_,dTT,_,_,c,rc = fork; _,_,_,_,_c,_rc = Fork
-                    Fork[0] += N_
-                    Fork[1] += dTT
-                    Fork[2] = sum(dTT[0])  # recompute m
-                    Fork[3] = sum(dTT[1])  # recompute d
-                    C =_c+c; Fork[4] += C
-                    Fork[5] = (_rc*_c + rc*c) / C  # weigh rc
+                Ft.R_ += ft.R_
+                Ft.dTT += ft.dTT
+                Ft.m = sum(Ft.dTT[0])  # recompute m
+                Ft.d = sum(Ft.dTT[1])  # recompute d
+                C = Ft.c + ft.c
+                Ft.c = C
+                Ft.rc = (Ft.rc*Ft.c + ft.rc*ft.c)/C  # weigh rc
 
 def extend_box(_box, box):
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
@@ -799,11 +800,10 @@ def proj_TT(L, cos_d, dist, rc, pTT = np.zeros((2,9))):  # always links
             pTT, V = proj_TT(lev, cos_d, dec, rc+1, pTT)  # acc pTT
             if abs(V-ave) > ave: return pTT, V
     else:   # project forks
-        for i, Ft in enumerate([L.dTT, L.Bt, L.Ct]):  # not sure we need Bt,Ct per L
+        for i, Ft in enumerate([L.dTT, L.Bt.dTT, L.Ct.dTT]):  # not sure we need Bt,Ct per L
             if Ft:
-                if len(Ft) > 2: Ft = [Ft]
-                for fork in Ft:
-                    fTT = fork.dTT if i else fork
+                # if len(Ft) > 2: Ft = [Ft]  # why we need this?
+                for fTT in Ft:
                     pTT += np.array([fTT[0] *dec, fTT[1] *cos_d *dec])
                     cert = abs(val_(pTT,rc) -ave)
                     if cert > ave:
@@ -860,7 +860,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 if edge.link_:
                     bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)
                     B_, bTT, bc, bO = bG.N_, bG.dTT, bG.c, bG.rc
-                    form_B__(Edge,[B_,bTT,sum(bTT[0]),sum(bTT[1]), bc,bO])  # add Edge.Bt
+                    form_B__(Edge,Cn(R_=B_,dTT=bTT,m=sum(bTT[0]),d=sum(bTT[1]),c=bc,rc=bO,root=Edge))  # add Edge.Bt
                     if val_(Edge.dTT,3, mw=(len(PPm_)-1)*Lw) > 0:
                         trace_edge(Edge,3)  # cluster complemented Gs via G.B_
                         if val_(bTT,4, mw=(len(B_)-1)*Lw):
@@ -875,7 +875,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     for N in N_: N.fin = 0
     for N in N_:
         _N_ = [B for rB in N.R_ if rB.Bt for B in rB.B_ if B is not N]  # temporary
-        if N.Bt: _N_ += [rB for B in N.B_ for rB in B.R_ if rB is not N]
+        if N.Bt: _N_ += [rB for B in N.B_ for rB in (B.R_ if hasattr(B, 'R_') else [B.root]) if rB is not N]  # not quite sure, for CdP, their do not have R_ and use root instead?
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
