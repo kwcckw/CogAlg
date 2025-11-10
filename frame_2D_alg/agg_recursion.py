@@ -83,7 +83,6 @@ class Cn(CBase):  # light CN for non-locals: H levels, Bt, Ct, nG, Bt?
         n.N_, n.L_ = kwargs.get('N_',[]),kwargs.get('L_',[])  # principals
         n.dTT = kwargs.get('dTT',np.zeros((2,9)))  # separate N_,L_ TTs?
         n.m,  n.d, n.c = kwargs.get('m',0), kwargs.get('d',0), kwargs.get('c',0)  # sum dTT
-        n.R_ =  kwargs.get('R_', [])
         n.B_, n.C_, n.R_ = kwargs.get('B_', []), kwargs.get('C_', []), kwargs.get('R_', [])  # sub-forks?
         n.rc = kwargs.get('rc',1)  # redundancy
         n.fi = kwargs.get('fi',1)  # for compatibility?
@@ -154,7 +153,7 @@ def form_B__(G, bG):  # assign boundary / background per node from Bt tuple
         R_ = list({n.root for L in bg.N_ for n in L.nt if n.root and n.root.root is not None}) # core Gs, exclude frame
         bg.R_ = sorted(R_+[G], key=lambda x:(x.m/x.c), reverse=True)
 
-    def R(L): return L.root if L.root is None or L.root in bG.R_ else R(L.root)
+    def R(L): return L.root if L.root is None or (L.root and L.root.root is bG ) else R(L.root)  # L.root is PPd, PPd.root is bG, to get PPd, we can check if L.root.root is bG
 
     for N in G.N_:
         if N.sub or not N.B_: continue
@@ -262,6 +261,8 @@ def comp_sub(_N,N, rc, root):  # unpack node trees down to numericals and compar
             dlev = Cn(dTT=tt, m=sum(tt[0]), d=sum(tt[1]), root=root, c=min(_lev.c,lev.c), rc=min(_lev.rc,lev.rc))
             if val_(tt,rc) > 0:  # sub-recursion:
                 comp_sub(_lev,lev, rc, dlev)
+            else:
+                dlev.N_ = [_N, N]  # i think we should add N_ to dlev here? Else we are getting dlev with empty N_ and H
             dH += [dlev]
     else:
         if N.H: N = N.H[0]  # comp 1st lev only
@@ -617,6 +618,7 @@ def slope(link_):  # get ave 2nd rate of change with distance in cluster or fram
 
 def Lnt(l): return ((l.nt[0].em + l.nt[1].em - l.m*2) * intw / 2 + l.m) / 2  # L.m is twice included in nt.em
 
+# obsolete
 def copy_(H, root):  # simplified
     cH = CN(dTT=deepcopy(H.dTT), root=root, rc=H.rc, m=H.m,d=H.d,c=H.c)  # summed across H
     cH.H = [copy_(lay,cH) for lay in H.H]
@@ -625,18 +627,22 @@ def copy_(H, root):  # simplified
 
 def Copy_(N, rc=1, root=None, init=0):
 
-    C = CN(root=root, dTT=deepcopy(N.dTT))
-    for attr in ['nt', 'baseT', 'box', 'rim', 'B_', 'C_', 'R_']: setattr(C, attr, copy(getattr(N, attr)))
-    for attr in ['m','d','c','em','ed','ec','rc','rng','fin','span','mang']: setattr(C, attr, getattr(N, attr))
-    for attr in ['Bt','Ct']: setattr(C, attr, Copy_(getattr(N, attr)))
-    if init: # new G
-        C.N_ = [N]; C.H = copy(N.H); C.yx = [N.yx]; C.angl = N.angl[0]  # to get mean (H should copy N.H now even with init?)
-        if init==1:  # else centroid
-            C.L_= [l for l in N.rim if l.m>ave]; N.root = C
-            N.em, N.ed = val_(N.eTT,rc), val_(N.eTT,rc,fi=0)
-    else:
-        C.N_,C.L_,C.H = list(N.N_),list(N.L_),copy_(N.H)
-        C.angl = N.angl; N.root = root or N.root; C.yx = copy(N.yx); C.fi = N.fi  # else 1
+    if isinstance(N, Cn):  # Cn
+       C = Cn(root=root, dTT=deepcopy(N.dTT))
+       for attr in ['H', 'N_', 'L_', 'm', 'd', 'c', 'B_', 'C_', 'R_', 'rc', 'fi']: setattr(C, attr, copy(getattr(N, attr)))
+    else:  # CN
+        C = CN(root=root, dTT=deepcopy(N.dTT))
+        for attr in ['nt', 'baseT', 'box', 'rim', 'B_', 'C_', 'R_']: setattr(C, attr, copy(getattr(N, attr)))
+        for attr in ['m','d','c','em','ed','ec','rc','rng','fin','span','mang']: setattr(C, attr, getattr(N, attr))
+        for attr in ['Bt','Ct']: setattr(C, attr, Copy_(getattr(N, attr)) if getattr(N, attr) else [])
+        if init: # new G
+            C.N_ = [N]; C.H = copy(N.H); C.yx = [N.yx]; C.angl = N.angl[0]  # to get mean (H should copy N.H now even with init?)
+            if init==1:  # else centroid
+                C.L_= [l for l in N.rim if l.m>ave]; N.root = C
+                N.em, N.ed = val_(N.eTT,rc), val_(N.eTT,rc,fi=0)
+        else:
+            C.N_,C.L_,C.H = list(N.N_),list(N.L_),[Copy_(lev, rc=lev.rc, root=N) for lev in N.H]
+            C.angl = N.angl; N.root = root or N.root; C.yx = copy(N.yx); C.fi = N.fi  # else 1
     return C
 
 def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1,fC=0): # sum node,link attrs in graph, aggH in agg+ or player in sub+
@@ -666,7 +672,7 @@ def add_N(N, n, rc, init=0, fC=0, froot=0):  # rn = n.n / mean.n
         Par += par  # extensive params, scale with c
     _cnt,cnt = N.c,n.c; Cnt = _cnt+cnt
     # weigh contribution of intensive params:
-    add_sub(N, n)  # H or Nt,Bt,Ct
+    add_sub(N, n,fmerge=not init)  # H or Nt,Bt,Ct  (if init,  we shouldn't merge anymore since n is already in N.N_ )
     N.mang = (N.mang*_cnt + n.mang*cnt) / Cnt
     N.span = (N.span*_cnt + n.span*cnt) / Cnt
     N.rc = (N.rc*_cnt + n.rc*cnt) / Cnt
@@ -687,7 +693,7 @@ def add_N(N, n, rc, init=0, fC=0, froot=0):  # rn = n.n / mean.n
     if froot: n.fin = 1; n.root = N
     return N
 
-def add_sub(N, n):  # add n.H|n.N_, n.Bt,n.Ct to N, analogous to comp_sub
+def add_sub(N, n, fmerge=1):  # add n.H|n.N_, n.Bt,n.Ct to N, analogous to comp_sub
 
     N.dTT += n.dTT
     if n.H:
@@ -696,7 +702,7 @@ def add_sub(N, n):  # add n.H|n.N_, n.Bt,n.Ct to N, analogous to comp_sub
                 if Lev and lev: add_sub(Lev,lev)
                 elif lev:
                     N.H += [copy_(lev, N)]
-    else: # single lev not in H
+    elif fmerge: # single lev not in H
         N.N_ += [n for n in n.N_ if n not in N.N_]
     for Ft, ft in zip((N.Bt, N.Ct), (n.Bt, n.Ct)):  # not redundant to H
         if ft:
@@ -855,8 +861,8 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 PPm_ = comp_slice(edge, rV, wTTf)
                 Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None); Edge.fi = 3
                 if edge.link_:
-                    bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)
-                    form_B__(Edge,bG)  # add Edge.Bt
+                    bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)  
+                    form_B__(Edge,bG)  # add Edge.Bt (but bG is CN instead of Cn here, so convert it? Or it doesn't matter?)
                     if val_(Edge.dTT,3, mw=(len(PPm_)-1)*Lw) > 0:
                         trace_edge(Edge,3)  # cluster complemented Gs via G.B_
                         if val_(bG.dTT,4, fi=0, mw=(len(bG.N_)-1)*Lw) > 0:
@@ -871,7 +877,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     for N in N_: N.fin = 0
     for N in N_:
         _N_ = [B for rB in N.R_ if rB.Bt for B in rB.B_ if B is not N]  # temporary
-        if N.Bt: _N_ += [rB for B in N.B_ for rB in B.R_ if rB is not N]
+        if N.Bt: _N_ += [rB for B in N.B_ for rB in (B.R_ if hasattr(B, 'R_') else [B.root]) if rB is not N]
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
