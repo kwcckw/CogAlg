@@ -89,7 +89,7 @@ class Cn(CBase):  # light CN for non-locals: H levels, Bt, Ct, nG, Bt?
         n.root = kwargs.get('root', None)  # immediate
 
     def zN_(n):  # get 1st level N_
-        return n.N_ if n.N_ else n.H[0].zN_()
+        return n.N_ if n.N_ else n.H[0].zN_()  # H[0].N_ and H could be empty? 
     def __bool__(n): return bool(n.c)
     # is_H(n: Cn) := bool(n.H); is_leaf(n: Cn) := bool(n.N_)
 
@@ -153,7 +153,7 @@ def form_B__(G, Bt):  # assign boundary / background per node from Bt tuple
         R_ = list({n.root for L in bG.N_ for n in L.nt if n.root and n.root.root is not None}) # core Gs, exclude frame
         bG.R_ = sorted(R_+[G], key=lambda x:(x.m/x.c), reverse=True)
     def R(L):
-        return L.root if L.root is None or L.root in bG.N_ else R(L.root)
+        return L.root if L.root is None or L.root in Bt.N_ else R(L.root)
 
     for N in G.N_:
         if N.sub or not N.B_: continue
@@ -168,7 +168,7 @@ def form_B__(G, Bt):  # assign boundary / background per node from Bt tuple
 
 def comp_C_(C_, rc, _C_=[], fall=1):  # max attr sort to constrain C_ search in 1D, add K attrs and overlap?
 
-    mL_,mTT, dL_,dTT = [],np.zeros((2,9)), [],np.zeros((2,9)); out_= [], cnt=0
+    mL_,mTT, dL_,dTT = [],np.zeros((2,9)), [],np.zeros((2,9)); out_= []; cnt=0
     if fall:
         if _C_: pairs = product(C_,_C_); C_ += [C for C in _C_ if C not in C_]
         else:   pairs = combinations(C_, r=2)
@@ -241,7 +241,7 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # ext
     angl = [A, np.sign(TT[1] @ wTTf[1])]  # canonic direction
     Link = CN(fi=0, dTT=TT, nt=[_N,N], c=min(N.c,_N.c), baseT=baseT, yx=yx, box=box, span=span, angl=angl, rng=rng, rc=rc)
-    if N.fi==1 and val_(TT,rc) > 0:  # not PP | Fg | link
+    if N.fi==1 and val_(TT,rc) > 0:  # not PP | Fg | link (so edge (fi==3) is skipped too?)
         comp_sub(_N,N, rc, Link)
     else:  # not done in comp_sub
         Link.m = val_(Link.dTT,rc); Link.d = val_(Link.dTT,rc,fi=0)  # added in comp_sub
@@ -443,7 +443,7 @@ def cluster_n(root, iC_, rc):  # simplified flood-fill, for C_ or trans_N_
     for C in iC_: C.fin = 0
     for C in iC_:  # form G per remaining C
         node_,link_,L_,B_ = [C],[],[],[]
-        cent_ = C.C_[0][:] if C.C_ else []
+        cent_ = C.C_  # C_ is flat now?
         _L_= [l for l in C.rim if Lnt(l) > ave*rc]  # link+nt eval
         while _L_:
             extend_G(_L_, node_, cent_, L_, B_, in_)  # _link_: select rims to extend G:
@@ -573,7 +573,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
             # m * ||C rvals?
         if val_(DTT,1,(len(C_)-1)*Lw, rc+olp, _TT=root.dTT) > 0:
             cG = cross_comp(sum_N_(C_,rc,root), rc, fC=1)  # distant Cs, different attr weights?
-        root.C_ = [cG.N_ if cG else C_, DTT]
+        root.C_ = cG.N_ if cG else C_  # flat C_ now for consistency? We cna always compute DTT from their C_ anyway
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
@@ -616,9 +616,11 @@ def Copy_(N, rc=1, root=None, init=0):
 
     C = Cn(root=root, dTT=deepcopy(N.dTT))  # default attrs:
     for attr in ['H','N_','L_','m','d','c','B_','C_','R_','rc','fi']: setattr(C, attr, copy(getattr(N, attr)))
-    if isinstance(N,CN):
-        for attr in ['nt','baseT','box','rim']: setattr(C, attr, copy(getattr(N, attr)))
-        for attr in ['em','ed','ec','rng','fin','span','mang']: setattr(C, attr, getattr(N, attr))
+    
+    # or convert to CN? We need to copy some additional params if N is CN, such as exe, compared, sub, etc
+    if hasattr(N, 'baseT'):  # should be checking attr? Because Cn maybe added with CN parameters and still a Cn
+        for attr in ['nt','baseT','eTT', 'box','rim', 'compared']: setattr(C, attr, copy(getattr(N, attr)))
+        for attr in ['em','ed','ec','rng','fin','span','mang','sub','exe']: setattr(C, attr, getattr(N, attr))
         for attr in ['Bt','Ct']: setattr(C, attr, Copy_(getattr(N, attr)) if getattr(N, attr) else [])
         if init: # new G
             C.N_ = [N]; C.H = copy(N.H); C.yx = [N.yx]; C.angl = N.angl[0]  # to get mean (H should copy N.H now even with init?)
@@ -636,7 +638,7 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1,fC=0):  # sum node,link at
     G.rc=rc; G.rng=rng; G.N_,G.L_,G.C_,G.B_ = N_,L_,C_,B_; ang=np.zeros(2)
     for N in N_[1:]:
         add_N(G,N, rc, init=1, fC=fC, froot=not fC)  # no need for froot?
-    Lev = Cn(root=G)  # sum L.H into Lev
+    Lev = Cn(root=G, dTT=G.dTT, m=G.m, d=G.d, c=G.c, rc=G.rc, fi=G.fi)  # sum L.H into Lev  (we need default params if nesting lev is default below?)
     for L in L_:
         for lev in L.H: add_sub(Lev,lev)  # combine L.H into Lev
         G.dTT+=L.dTT; ang+=L.angl[0]; add_sub(G,L)  # L.H added separately
@@ -680,7 +682,7 @@ def add_N(N, n, rc, init=0, fC=0, froot=0):  # rn = n.n / mean.n
 
 def add_sub(N, n, fmerge=1):  # add n.H|n.N_, n.Bt,n.Ct to N, analogous to comp_sub
 
-    N.dTT += n.dTT
+    N.dTT += n.dTT; N.rc = (N.rc * N.c + n.rc * n.c) / (N.c + n.c); N.c += n.c
     if n.H:
         if n.fi:  # link H is summed into new level separately
             for Lev, lev in zip_longest(N.H,n.H):
@@ -689,6 +691,11 @@ def add_sub(N, n, fmerge=1):  # add n.H|n.N_, n.Bt,n.Ct to N, analogous to comp_
                     N.H += [Copy_(lev, N)]
     elif fmerge:  # single lev not in H
         N.N_ += [n for n in n.N_ if n not in N.N_]
+        # how about L_, C_ and B_?
+    N.m = sum(N.dTT[0]); N.m = sum(N.dTT[1])
+
+    # below not relevant for sub now
+    '''
     for Ft, ft in zip((N.Bt, N.Ct), (n.Bt, n.Ct)):  # not redundant to H
         if ft:
             Ft.N_ += [n for n in ft.N_ if n not in Ft.N_]
@@ -698,6 +705,7 @@ def add_sub(N, n, fmerge=1):  # add n.H|n.N_, n.Bt,n.Ct to N, analogous to comp_
             Ft.d = sum(Ft.dTT[1])  # recompute d
             C = Ft.c + ft.c; Ft.c = C
             Ft.rc = (Ft.rc*Ft.c + ft.rc*ft.c)/C  # weigh rc
+    '''
 
 def extend_box(_box, box):
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
@@ -796,7 +804,7 @@ def proj_TT(L, cos_d, dist, rc, pTT):  # accumulate link pTT with iTT or eTT int
     if cert > ave:  # +|-certainty margin
         pTT += TT; return
     if L.H:
-        for lev in L.H: proj_TT(lev, cos_d, dist, rc+1, pTT)  # accum refined pTT
+        for lev in L.H: proj_TT(lev, cos_d, dist, rc+1, pTT)  # accum refined pTT (lev doesn't have span, add span to lev based on their N_'s span?)
     else: pTT += TT   # L.dTT is redundant to H, neither is redundant to Bt,Ct?
 
     for TT in [L.Bt.dTT if L.Bt else None, L.Ct.dTT if L.Ct else None]:  # + trans-link tNt, tBt, tCt?
@@ -847,7 +855,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None); Edge.fi = 3
                 if edge.link_:
                     bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)
-                    form_B__(Edge,bG)  # add Edge.Bt (but bG is CN instead of Cn here, so convert it? Or it doesn't matter?)
+                    form_B__(Edge,bG)  # add Edge.Bt
                     if val_(Edge.dTT,3, mw=(len(PPm_)-1)*Lw) > 0:
                         trace_edge(Edge,3)  # cluster complemented Gs via G.B_
                         if val_(bG.dTT,4, fi=0, mw=(len(bG.N_)-1)*Lw) > 0:
