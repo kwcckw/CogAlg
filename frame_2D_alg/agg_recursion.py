@@ -243,7 +243,7 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # ext
     angl = [A, np.sign(TT[1] @ wTTf[1])]  # canonic direction
     Link = CN(fi=0, dTT=TT, nt=[_N,N], c=min(N.c,_N.c), baseT=baseT, yx=yx, box=box, span=span, angl=angl, rng=rng, rc=rc)
-    if (_N.N_ or _N.H) and (N.N_ or N.H) and val_(TT,rc) > 0:
+    if ((_N.N_ and isinstance(_N.N_[0], CN)) or _N.H) and ((N.N_ and isinstance(N.N_[0], CN)) or N.H) and val_(TT,rc) > 0:  # skip PPs with CP nodes (when calling from trace_edge)
         comp_sub(_N,N, rc, Link)
     Link.m, Link.d = vt_(Link.dTT)
     for n, _n in (_N,N), (N,_N):  # if rim-mediated comp: reverse dir in _N.rim: rev^_rev?
@@ -378,7 +378,7 @@ def Cluster(root, iL_, rc, iC):  # generic clustering root
                 if val_(L.dTT,rc+compw, fi=0) < 0:  # merge
                     _N, N = L.nt
                     if _N is not N:  # not merged
-                        add_N(_N,N, rc, froot=1)  # fin,root.rim
+                        add_N(_N,N,froot=1)  # fin,root.rim (rc is not needed now)
                         for l in N.rim: l.nt = [_N if n is N else n for n in l.nt]
                         if N in N_: N_.remove(N)  # if multiple merging
                         N_ += [_N]
@@ -652,29 +652,45 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1,fC=0):  # sum node,link at
 
 def add_N(N, n, init=0, fC=0, froot=0):  # rn = n.n / mean.n
 
-    for Par,par in zip((N.baseT,N.dTT), (n.baseT,n.dTT)):
-        Par += par  # extensive params, scale with c
-    _cnt,cnt = N.c,n.c; Cnt = _cnt+cnt
-    # weigh contribution of intensive params:
-    # add_sub(N,n, N)  # H or N_?
-    N.mang = (N.mang*_cnt + n.mang*cnt) / Cnt
-    N.span = (N.span*_cnt + n.span*cnt) / Cnt
+    for attr in ('baseT','dTT'):
+        if not hasattr(N, attr): continue  # skip baseT forCn
+        Par = getattr(N, attr); par = getattr(n, attr); Par += par  # extensive params, scale with c
+
+    _cnt,cnt = N.c,n.c; Cnt = _cnt+cnt+1
     N.rc = (N.rc*_cnt + n.rc*cnt) / Cnt
-    N.box = extend_box(N.box, n.box)
     N.c += n.c  # cnt / mass
-    if init:  # N is G
-        n.em, n.ed = vt_(n.eTT); N.yx += [n.yx]
-        N.angl = (N.angl*_cnt + n.angl[0]*cnt) / Cnt  # vect only
+    if isinstance(N, CN):
+        # weigh contribution of intensive params:
+        # add_sub(N,n, N)  # H or N_?  (if we use add_N for both Cn and CN, add_sub is redundant now?)
+        N.mang = (N.mang*_cnt + n.mang*cnt) / Cnt
+        N.span = (N.span*_cnt + n.span*cnt) / Cnt
+        N.box = extend_box(N.box, n.box)
+        
+        # This should be in add_N now? 
+        for attr in ('Bt', 'Ct'):
+            Ft = getattr(N, attr); ft = getattr(n, attr)
+            if isinstance(ft, CN):  # use isinstance(CN) to skip list
+                if isinstance(Ft, CN): add_N(Ft, ft)
+                else:                  setattr(N, attr, Copy_(ft, root=N))
+
+    if init:
+        if isinstance(N, CN) :  # N is G (init always have N as CN?)
+            n.em, n.ed = vt_(n.eTT); N.yx += [n.yx]
+            N.angl = (N.angl*_cnt + n.angl[0]*cnt) / Cnt  # vect only
     else:     # merge n
         if N.H:
             if n.H:
                 for Lev,lev in zip(N.H,n.H): add_N(Lev,lev)
-            else: add_N(N.H[0], sum_N_(n.N_,root=N))
-        else:
+            # else: add_N(N.H[0], sum_N_(n.N_,rc=n.rc,root=N))
+            elif n.N_: add_N(N.H[0], sum_N_(n.N_,rc=n.rc,root=N))
+        elif isinstance(N, Cn):
             N.H = [n] + N.H
         #  for node in n.N_: node.root = N; N.N_ += [node]  not sure
-        A,a = N.angl[0],n.angl[0]; A[:] = (A*_cnt+a*cnt) / Cnt
-        N.L_ += n.L_; N.rim += n.rim  # no L.root, rims can't overlap?
+        N.L_ += n.L_
+        if isinstance(N, CN):
+            A,a = N.angl[0],n.angl[0]; A[:] = (A*_cnt+a*cnt) / Cnt 
+            N.rim += n.rim  # no L.root, rims can't overlap?
+
     n.C_ += [C for C in n.C_ if C not in N.C_]  # centroids, not in root Ct
     n.B_ += [B for B in n.B_ if B not in N.B_]  # high-diff links, not in root Bt?
     # if N is Fg: margin = Ns of proj max comp dist > min _Fg point dist: cross_comp Fg_?
@@ -696,19 +712,7 @@ def add_sub(N,n, root):  # add n.H|n.N_, n.Bt,n.Ct to N, analogous to comp_sub
     # add in root?
     for L_,l_ in zip((N.L_, N.B_, N.R_), (n.L_, n.B_, n.R_)):
         L_ += [l for l in l_ if l not in L_]
-    ''' 
-    not sure:
-    for Ft, ft in zip((N.Bt, N.Ct), (n.Bt, n.Ct)):
-        if ft:
-            if Ft:
-                for L_,l_ in zip((Ft.N_,Ft.L_,Ft.B_,Ft.R_), (ft.N_,ft.L_,ft.B_,ft.R_)):
-                L_ += [l for l in l_ if l not in L_]
-                Ft.rc += ft.rc; Ft.c += ft.c
-                Ft.dTT += ft.dTT
-                Ft.m = sum(Ft.dTT[0])  # recompute m
-                Ft.d = sum(Ft.dTT[1])  # recompute d
-            else copy
-    '''
+   
 def extend_box(_box, box):
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
     return min(y0,_y0), min(x0,_x0), max(yn,_yn), max(xn,_xn)
