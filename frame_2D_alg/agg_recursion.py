@@ -51,7 +51,7 @@ class CN(CBase):
         # 2=G: + rim, eTT,em,ed,ec, baseT,mang,sub,exe, Nt,Bt,Ct, tNt,tBt,tCt
         # 3=PP: 2 + skip comp_sub?
         n.H = kwargs.get('H', [])  # empty if N_:
-        n.N_, n.L_ = kwargs.get('N_',[]), kwargs.get('L_')  # core attrs
+        n.N_, n.L_ = kwargs.get('N_',[]), kwargs.get('L_', [])  # core attrs
         n.dTT = kwargs.get('dTT',np.zeros((2,9)))  # sum N_ dTT: m_,d_ [M,D,n, I,G,a, L,S,A], separate total,L_ TTs?
         n.m,  n.d, n.c = kwargs.get('m',0), kwargs.get('d',0), kwargs.get('c',0)  # sum dTT
         n.rim = kwargs.get('rim',[])  # external links, rng-nest?
@@ -599,19 +599,20 @@ def Copy_(N, rc=1, root=None, init=0):
 
     C = CN(root=root, typ=N.typ, dTT=deepcopy(N.dTT))
     # default attrs:
-    for attr in ['H','N_','L_','m','d','c','B_','C_','R_','rc']: setattr(C, attr, copy(getattr(N, attr)))
+    for attr in ['H','N_','L_','m','d','c','B_','C_','rc']: setattr(C, attr, copy(getattr(N, attr)))
     if N.typ:  # then if N.typ>1?
         for attr in ['em','ed','ec','rng','fin','span','mang','sub','exe']: setattr(C, attr, getattr(N, attr))
-        for attr in ['nt','baseT','eTT', 'box','rim', 'compared']: setattr(C, attr, copy(getattr(N, attr)))
+        for attr in ['nt','baseT','eTT', 'box','rim', 'compared', 'R_']: setattr(C, attr, copy(getattr(N, attr)))
         for attr in ['Bt','Ct']: setattr(C, attr, Copy_(getattr(N, attr)) if getattr(N, attr) else [])
         if init: # new G
-            C.N_ = [N]; C.yx = [N.yx]; C.angl = N.angl[0]  # to get mean
+            C.N_ = [N]; C.yx = [N.yx]; C.angl = np.array([copy(N.angl[0]), N.angl[1]],dtype=object)  # to get mean
             if init==1:  # else centroid
                 C.L_= [l for l in N.rim if l.m>ave]; N.root = C
                 N.em, N.ed = val_(N.eTT,rc), val_(N.eTT,rc,fi=0)
+                C.H = [Copy_(N, rc=N.rc, root=C)]; C.H[0].typ=0  # when init, we need to init H?
         else:
             C.N_,C.L_,C.H = list(N.N_),list(N.L_),[Copy_(lev, rc=lev.rc, root=N) for lev in N.H]
-            C.angl = N.angl; N.root = root or N.root; C.yx = copy(N.yx); C.typ = N.typ  # else 1
+            C.angl = copy(N.angl); N.root = root or N.root; C.yx = copy(N.yx); C.typ = N.typ  # else 1
     return C
 
 def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1,fC=0):  # sum node,link attrs in graph, aggH in agg+ or player in sub+
@@ -619,7 +620,8 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1,fC=0):  # sum node,link at
     G = Copy_(N_[0],rc, root, init=fC+1)
     G.rc=rc; G.rng=rng; G.N_,G.L_,G.C_,G.B_ = N_,L_,C_,B_; ang=np.zeros(2)
     for N in N_[1:]:
-        add_N(G,N, init=1, fC=fC, froot=not fC)  # no need for froot?
+        # init should be 0 here? We need init in the Copy above only
+        add_N(G,N, init=0, fC=fC, froot=not fC)  # no need for froot? We need it to 
     Lev = CN(typ=0, root=G)  # sum L.H into Lev
     for L in L_:
         for lev in L.H: add_N(Lev,lev)  # combine L.H into Lev
@@ -644,13 +646,14 @@ def add_N(N, n, init=0, fC=0, froot=0):  # rn = n.n / mean.n
     N.c = (N.c*_cnt)+(n.c*cnt) / Cnt  # cnt / mass, same for centroids?
     n.C_ += [C for C in n.C_ if C not in N.C_]  # centroids, concat regardless
     if init:
-        if n.H: N.H = n.H
-        N.H += [n]  # default, higher G must have H, init with n
+        if n.H: N.H = copy(n.H)  # copy list
+        # N.H = [sum_N_(n.N_, rc=n.rc, root=N)] + N.H  # default, higher G must have H, init with n
+        N.H = [Copy_(n, rc=n.rc, root=N)] + N.H  # top layer first?
     else:  # concat
         if n.H:  # N.H init above
             for Lev, lev in zip(N.H, n.H): add_N(Lev, lev)
-        else:
-            add_N(N.H[0], sum_N_(n.N_, rc=n.rc, root=N))
+        elif not N.N_ and N.H:  # skip if both are terminal fork? (empty H and non empty N_)?
+            add_N(N.H[0], Copy_(n, rc=n.rc, root=N))
     if N.typ:
         N.eTT += n.eTT
         N.baseT += n.baseT
@@ -660,8 +663,8 @@ def add_N(N, n, init=0, fC=0, froot=0):  # rn = n.n / mean.n
         A,a = N.angl[0],n.angl[0]; A[:] = (A*_cnt+a*cnt) / Cnt  # not sure
         N.yx += [n.yx]  # weigh by Cnt?
         N.box = extend_box(N.box, n.box)
-        for Ft, ft in zip((N.Bt, N.Ct, N.Nt), (n.Bt, n.Ct, N.Nt)):
-            if ft: add_N(Ft,ft)  # Ft maybe empty CN, weigh by Cnt?
+        for Ft, ft in zip((N.Bt, N.Ct), (n.Bt, n.Ct)):  # no more Nt now?
+            if ft: Ft.yx = [Ft.yx]; add_N(Ft,ft); Ft.yx = np.mean(Ft.yx, axis=0)  # Ft maybe empty CN, weigh by Cnt?
         for L in n.rim:
             if L.m > ave: N.L_ += [L]
             else: N.B_ += [L]
@@ -703,7 +706,7 @@ def PP2N(PP):
     y,x,Y,X = box; dy,dx = Y+1-y, X+1-x
     A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
     PP = CN(typ=3, N_=P_,B_=B_, m=m,d=d,c=c, baseT=baseT, dTT=dTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
-    for P in PP.N_: P.root = PP
+    for P in PP.N_: P.root = PP; PP.R_ = []  # R_ is init externally now?
     return PP
 
 def ffeedback(root):  # adjust filters: all aves *= rV, ultimately differential backprop per ave?
