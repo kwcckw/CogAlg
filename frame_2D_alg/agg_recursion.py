@@ -247,7 +247,7 @@ def comp_sub(_N,N, rc, root):  # unpack node trees down to numericals and compar
             dH += [dlev]
         Nt = root.Nt  # root is link, Nt.N_ is dH:
         if not Nt.nest: lev0=Nt; Nt=Copy_(Nt); Nt.N_=[lev0]  # redundant
-        nt = sum_N_(dH, Nt); Nt.N_ += [nt]; root.dTT+=nt.dTT; root.c+=nt.c  # update in-place
+        nt = sum_N_(dH, rc, Nt, update=0); Nt.N_ += [nt]; root.dTT+=nt.dTT; root.c+=nt.c  # update in-place
 
 def base_comp(_N,N):  # comp Et, baseT, extT, dTT
 
@@ -379,7 +379,7 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
                 for m, Ft in zip(mmax_,Ft_): # +rdn in 3 fork pairs
                     r = sm_.index(m); Ft[0][-1]+=r; Ft[1][-1]+=r  # rc+=rdn
                 # pack as separate tBt,tCt, not nested pairs?
-        if not nG: nG = sum_N_(N_, rc, root, L_)
+        if not nG: nG = sum_N_(N_, rc, root, L_)  # update = 1 here, to replace root with nG
     else:
         # primary centroid clustering
         N_ = list({N for L in iL_ for N in L.nt if N.em})  # newly connected only
@@ -428,10 +428,10 @@ def cluster_n(root, iC_, rc):  # simplified flood-fill, for C_ or trans_N_
             for n in N_: olp += n.rc  # from Ns, vs. Et from Ls?
             for l in L_: dTT += l.dTT
             if val_(dTT,rc+olp, mw=(len(N_)-1)*Lw,_TT=root.dTT) > 0:
-                G_ += [sum_N_(N_,olp,root, L_,C_)]
+                G_ += [sum_N_(N_,olp,root, L_,C_, update=0)]
             elif n.fi:
                 G_ += N_
-    if G_: return sum_N_(G_, rc, root)  # nG
+    if G_: return sum_N_(G_, rc, root)  # nG (replaces root)
 
 def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
 
@@ -483,7 +483,7 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
             for n in N_: olp += n.rc  # from Ns, vs. Et from Ls?
             for l in L_: dTT += l.dTT
             if val_(dTT, rc+olp, 1, (len(N_)-1)*Lw, root.dTT) > 0:
-                G_ += [sum_N_(N_, olp, root, L_, C_, B_, rng)]
+                G_ += [sum_N_(N_, olp, root, L_, C_, B_, rng, update=0)]
             elif n.fi:  # L_ is preserved anyway
                 for n in N_: n.sub += 1
                 G_ += N_
@@ -505,7 +505,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         _Ct_ = [[c, c.m/c.c if c.m !=0 else eps, c.rc] for c in _C_]
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave * _o:
-                C = cent_attr( sum_N_(_C.N_, rc, root, fC=1), rc); C.R_ = []  # C update lags behind N_; non-local C.rc += N.mo_ os?
+                C = cent_attr( sum_N_(_C.N_, rc, root, fC=1, update=0), rc); C.R_ = []  # C update lags behind N_; non-local C.rc += N.mo_ os?
                 _N_,_N__, mo_, M,D,O,comp,dTT,dm,do = [],[],[],0,0,0,0,np.zeros((2,9)),0,0  # per C
                 for n in _C._N_:  # core+ surround
                     if C in n.rC_: continue
@@ -545,7 +545,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
             n.exe = [n.M, n.D][n.fi] + np.sum([mo[0] - ave*mo[1] for mo in n.mo_]) - ave  # exemplar V + summed n match_dev to Cs
             # m * ||C rvals?
         if val_(DTT,1,(len(C_)-1)*Lw, rc+olp, _TT=root.dTT) > 0:
-            cG = cross_comp(sum_N_(C_,rc,root), rc, fC=1)  # distant Cs, different attr weights?
+            cG = cross_comp(sum_N_(C_,rc,root,update=0), rc, fC=1)  # distant Cs, different attr weights?
         root.C_ = cG.N_ if cG else C_
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
@@ -599,7 +599,6 @@ def Copy_(N, rc=1, root=None, init=0):
             if init==1:  # else centroid
                 C.L_= [l for l in N.rim if l.m>ave]; N.root = C
                 N.em, N.ed = val_(N.eTT,rc), val_(N.eTT,rc,fi=0)
-                # C.H = [Copy_(N, rc=N.rc, root=C)]; C.H[0].typ=0
         else:
             C.N_,C.L_ = list(N.N_),list(N.L_)
             C.angl = copy(N.angl); N.root = root or N.root; C.yx = copy(N.yx); C.typ = N.typ  # else 1
@@ -607,7 +606,7 @@ def Copy_(N, rc=1, root=None, init=0):
 
 def sum_N_(N_, rc, root=None, L_=[], C_=[], B_=[], rng=1, fC=0, update=1):
 
-    G = root if update else CN(rc=rc, root=root, rng=rng)  # should always update root?
+    G = root if (root and update) else CN(rc=rc, root=root, rng=rng)  # should always update root? Except sum2graph, and root must not empty when update = 1?
     G.dTT=np.zeros((2,9)); G.c=0  # replace, weigh by C?
     for Ft, F_, iF_ in zip(('Nt','Bt','Ct','Lt'),('N_','B_','C_','L_'), (N_,B_,C_,L_)):
         setattr(G, F_, iF_)
@@ -690,7 +689,7 @@ def PP2N(PP):
     A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
     PP = CN(typ=3, N_=P_,L_=link_,B_=B_, m=m,d=d,c=c, baseT=baseT, dTT=dTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
     PP.Nt = CN(typ=0, dTT=dTT, m=m,d=d,c=c)  # empty N_: redundant
-    PP.Lt = CN(typ=0, dTT=sum(l.dTT for l in link_))  # do we need this?
+    # PP.Lt = CN(typ=0, dTT=sum(l.vert for l in link_))  # do we need this? I guess not
     for P in PP.N_: P.root = PP
     return PP
 
@@ -799,9 +798,9 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
                 PPm_ = comp_slice(edge, rV, wTTf)
-                Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None); Edge.typ = 2
+                Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None, update=0); Edge.typ = 2  # when root is None, update must be false
                 if edge.link_:
-                    bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge)
+                    bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, Edge,update=0)  # update should be 0 here, since bG from PPd shouldn't replace Edge
                     form_B__(Edge,bG)  # add Edge.Bt
                     if val_(Edge.dTT,3, mw=(len(PPm_)-1)*Lw) > 0:
                         trace_edge(Edge,3)  # cluster complemented G x G.B_
@@ -816,8 +815,8 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     L_ = []; cT_ = set()  # comp pairs
     for N in N_: N.fin = 0
     for N in N_:
-        _N_ = [B for rB in N.Nt.N_ if rB.Bt for B in rB.B_ if B is not N]  # temporary
-        if N.Bt: _N_ += [rB for B in N.B_ if B.Nt for rB in B.Nt.N_ if rB is not N]
+        _N_ = [B for rB in N.Nt.N_ if rB.Bt for B in rB.B_ if B is not N]  # temporary (we actually can't know if N.Nt.N_ is R_ or N_ here?)
+        if N.Bt: _N_ += [rB for B in N.Bt.N_ for rB in B.Nt.N_ if rB is not N]  # should be from B.Nt.N_ now
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
@@ -846,7 +845,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     G_= []
     for n_,l_, dtt,olp, merged in Gt_:
         if not merged and np.sum(dtt[0])/dtt[0][2] > ave*rc:  # or m/(m+d)?
-            G_ += [sum_N_(n_,olp,root,l_)]  # include singletons
+            G_ += [sum_N_(n_,olp,root,l_,update=0)]  # include singletons
     for N in N_: N.fin = 0
     root.N_ = G_
 
