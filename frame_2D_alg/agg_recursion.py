@@ -117,11 +117,12 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering, fT: 
     # m fork:
     if len(mL_) > 1 and val_(mTT, rc+compw, mw=(len(mL_)-1)*Lw) > 0:
         for n in N_: n.em = sum([l.m for l in n.rim]) / len(n.rim)  # tentative before val_
-        if Cluster(root, mL_, rc, fC):  # fC=0: get_exemplars, cluster_C, rng connect cluster, update root in-place
+        Cluster(root, mL_, rc, fC)  # fC=0: get_exemplars, cluster_C, rng connect cluster, update root in-place
+        if root:
             rc = root.rc  # include new clustering layers
             if Bt.Nt:  # add eval?
                 form_B__(root,Bt)  # add boundary to N and N to Bg R_s, no root update
-                if val_(mTT, rc+3+contw, mw=(len(root.N_)-1)*Lw) > 0:  # mval
+                if val_(mTT, rc+3+contw, mw=(len(Bt.Nt.N_[-1].N_ if Bt.Nt.nest else Bt.N_)-1)*Lw) > 0:  # mval (should be Bt.N_ here? else there's no edge at all)
                     trace_edge(root,rc+3)  # comp Ns with shared N.Bt
             if val_(root.dTT, rc+compw+3, mw=(len(root.N_)-1)*Lw, _TT=mTT) > 0:
                 cross_comp(root, rc+3)  # connec agg+, fC = 0
@@ -331,18 +332,16 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
 
     def trans_cluster(root, iL_,rc):  # called from cross_comp(Fg_), others?
 
-        dN_,dL_,dC_ = [],[],[]  # splice specs from links between Fgs in Fg cluster
-        for Link in iL_: dN_+= Link.N_; dL_+= Link.B_; dC_+= Link.C_  # trans-G links
-        Nt, Lt, Ct = [],[],[]
-        for f_,link_,clust, fC in [(Nt,dN_,cluster_N,0),(Lt,dL_,cluster_N,0),(Ct,dC_,cluster_n,1)]:
+        dN_,dB_,dL_,dC_ = [],[],[],[]  # splice specs from links between Fgs in Fg cluster
+        for Link in iL_: dN_+= Link.N_; dB_+= Link.B_; dL_ += Link.L_; dC_+= Link.C_  # trans-G links
+
+        for ft,link_,clust, fC in [('tNt',dN_,cluster_N,0),('tBt',dB_,cluster_N,0),('tLt',dL_,cluster_N,0),('tCt',dC_,cluster_n,1)]:
+            Ft = CN()
             if link_:
-                G = clust(root, link_, rc)
-                if G:
-                    if val_(G.dTT, rc, mw=(len(G.N_)-1)*Lw) > 0: G = cross_comp(G,rc, fC=fC) or G
-                    f_[:] = [G.N_, G.dTT, G.m, G.d, G.c, G.rc]
-        # trans-fork_ via trans-G links:
-        return Nt, Lt, Ct
-    nG = []
+                clust(Ft, link_, rc)  # Ft is root
+                if val_(Ft.dTT, rc, mw=(len(Ft.N_)-1)*Lw) > 0: cross_comp(Ft,rc, fC=fC) or Ft    
+            setattr(root, ft, Ft)  # trans-fork_ via trans-G links: (default even empty params?)
+
     if fC or not root.root:  # base connect via cluster_n, no exemplars or centroid clustering
         N_, L_, i = [],[],0
         if fC < 2:  # merge similar Cs, not dCs, no recomp
@@ -360,25 +359,24 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
         else: L_ = iL_
         N_ += list({n for L in L_ for n in L.nt})  # include merged Cs
         if val_(root.dTT, rc+contw, mw=(len(N_)-1)*Lw) > 0:
-            nG = cluster_n(root, N_,rc)  # in feature space if centroids, no B_,C_?
-            tL_ = [tl for n in nG.N_ for l in n.L_ for tl in l.N_]  # trans-links?
+            cluster_n(root, N_,rc)  # in feature space if centroids, no B_,C_?
+            tL_ = [tl for n in root.N_ for l in n.L_ for tl in l.N_]  # trans-links?
             if sum(tL.m for tL in tL_) * ((len(tL_)-1)*Lw) > ave*(rc+contw):
-                tF_ = trans_cluster(nG, tL_, rc+1)
-                Ft_ = []  # [[F,tF]]
-                for n_, tF in zip((nG.N_, nG.B_, nG.C_), tF_):
-                    dtt = np.zeros((2,9)); c,rc = 0,0  # if no Fts yet?
-                    for n in n_: dtt += n.dTT; c += n.c; rc += n.rc
-                    Ft_ += [[[N_,dtt, vt_(dtt), c, rc], tF]]  # cis,trans fork pairs, convert to Cn
+                trans_cluster(root, tL_, rc+1)
+                for tf, n_ in zip(('Nt', 'Bt', 'Lt', 'Ct'), (root.N_, root.B_, root.L_, root.C_)):
+                    if n_:
+                        Ft = sum_N_(N_, rc, root,init=1)
+                        setattr(root, tf, Ft)
                 mmax_ = []
-                for F,tF in Ft_:  # or Bt,Ct from cross_comp?
+                for F,tF in zip((root.Nt,root.Bt,root.Lt,root.Ct),(root.tNt,root.tBt,root.tLt,root.tCt)):  # or Bt,Ct from cross_comp?
                     if F and tF:
-                        m,tm = F[2],tF[2]; maxF,minF = (F,tF) if m>tm else (tF,F)
-                        mmax_+= [max(m,tm)]; minF[-1]+=1  # rc+=rdn
+                        maxF,minF = (F,tF) if F.m>tF.m else (tF,F)
+                        mmax_+= [max(F.m,tF.m)]; minF.rc+=1  # rc+=rdn
                 sm_ = sorted(mmax_, reverse=True)
-                for m, Ft in zip(mmax_,Ft_): # +rdn in 3 fork pairs
-                    r = sm_.index(m); Ft[0][-1]+=r; Ft[1][-1]+=r  # rc+=rdn
-                # pack as separate tBt,tCt, not nested pairs?
-        if not nG: sum_N_(N_, rc, root, L_, init=0)  # specify set root.C_?
+                for m, (Ft, tFt) in zip(mmax_,((root.Nt, root.tNt),(root.Bt, root.tBt),(root.Lt, root.tLt),(root.Ct, root.tCt))): # +rdn in 3 fork pairs
+                    r = sm_.index(m); Ft.rc+=r; tFt.rc+=r  # rc+=rdn
+
+        # if not nG: sum_N_(N_, rc, root, L_, init=0)  # specify set root.C_?  this should be not needed now since all updates are in placed?
     else:
         # primary centroid clustering
         N_ = list({N for L in iL_ for N in L.nt if N.em})  # newly connected only
@@ -427,9 +425,9 @@ def cluster_n(root, iC_, rc):  # simplified flood-fill, for C_ or trans_N_
             for l in L_: dTT += l.dTT
             if val_(dTT,rc+olp, mw=(len(N_)-1)*Lw,_TT=root.dTT) > 0:
                 G_ += [sum_N_(N_, olp,root, L_,C_)]
-            elif n.fi:
+            elif n.typ != 1:
                 G_ += N_
-    if G_: return sum_N_(G_, rc, root, init=0)  # replace root
+    if G_: sum_N_(G_, rc, root, init=0)  # replace root
 
 def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
 
@@ -482,10 +480,10 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
             for l in L_: dTT += l.dTT
             if val_(dTT, rc+olp, 1, (len(N_)-1)*Lw, root.dTT) > 0:
                 G_ += [sum_N_(N_, olp, root, L_, C_, B_, rng)]
-            elif n.fi:  # L_ is preserved anyway
+            elif n.typ != 1:  # L_ is preserved anyway
                 for n in N_: n.sub += 1
                 G_ += N_
-    if G_: return sum_N_(G_, rc, root, init=0)  # nG, skip attrs in sum_N_?
+    if G_: sum_N_(G_, rc, root, init=0)  # nG, skip attrs in sum_N_?
 
 def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround via rims of new member nodes, within root
 
@@ -540,11 +538,13 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
     C_ = [C for C in C_ if val_(C.DTT, rc)]  # prune C_
     if C_:
         for n in [N for C in C_ for N in C.N_]:
-            n.exe = [n.M, n.D][n.fi] + np.sum([mo[0] - ave*mo[1] for mo in n.mo_]) - ave  # exemplar V + summed n match_dev to Cs
+            n.exe = (n.D if n.typ == 1 else n.M) + np.sum([mo[0] - ave*mo[1] for mo in n.mo_]) - ave  # exemplar V + summed n match_dev to Cs
             # m * ||C rvals?
         if val_(DTT,1,(len(C_)-1)*Lw, rc+olp, _TT=root.dTT) > 0:
-            cross_comp( sum_N_(C_,rc,root), rc, fC=1)  # distant Cs, different attr weights?
-            # this should be internal: root.C_ = cG.N_ if cG else C_
+            Ct = sum_N_(C_,rc,root)
+            cross_comp(Ct , rc, fC=1)  # distant Cs, different attr weights?
+            setattr(root, Ct, 'Ct') if Ct else setattr(root, C_, 'C_')
+            # this should be internal: root.C_ = cG.N_ if cG else C_ (something like above?)
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
@@ -604,7 +604,7 @@ def Copy_(N, rc=1, root=None, init=0):
 
 def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, fC=0, init=1):
 
-    if init: G = CN(nest=root.nest, N_=N_,L_=L_,B_=B_,C_=C_, rc=rc, rng=rng, root=root)  # new cluster
+    if init: G = CN(nest=root.nest if root else 0, N_=N_,L_=L_,B_=B_,C_=C_, rc=rc, rng=rng, root=root)  # new cluster
     else:    G = root; G.dTT=np.zeros((2,9)); G.c=0  # replace, weigh by C?
     for ft,f_,F_ in zip(('Nt','Bt','Ct','Lt'),('N_','B_','C_','L_'), (N_,B_,C_,L_)):
         setattr(G, f_,F_)
