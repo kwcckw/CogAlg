@@ -361,7 +361,7 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
                 if val_(L.dTT,rc+compw, fi=0) < 0:  # merge
                     _N, N = L.nt
                     if _N is not N:  # not merged
-                        add_N(_N,N,froot=1)  # fin,root.rim
+                        add_N(_N,N,froot=1,merge=1)  # fin,root.rim (special case here, where merge should be 1 as well)
                         for l in N.rim: l.nt = [_N if n is N else n for n in l.nt]
                         if N in N_: N_.remove(N)  # if multiple merging
                         N_ += [_N]
@@ -448,7 +448,7 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
             for _N in L.nt:
                 if _N.fin: continue
                 if not _N.root or _N.root==root or not _N.L_:  # not rng-banded
-                    node_+=[_N]; cent_+=_N.R_; _N.fin = 1
+                    node_+=[_N]; cent_+=_N.rC_; _N.fin = 1
                     for l in _N.rim:
                         if l in in_: continue  # cluster by link+density:
                         if l in rL_:
@@ -459,7 +459,7 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
                     if _R and not _R.fin:
                         if rolp(N, link_, R=1) > ave * rc:
                             node_ += [_R]; _R.fin = 1; _N.fin = 1
-                            link_ += _R.L_; cent_ += _R.cR_
+                            link_ += _R.L_; cent_ += _R.rC_
     G_, up,in_ = [],0,set()
     rN_ = {N for L in rL_ for N in L.nt}
     for n in rN_: n.fin = 0
@@ -536,9 +536,9 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
                 else:
                     for n in _C._N_:
                         n.exe = n.m/n.c > 2 * ave  # refine exe
-                        for i, c in enumerate(n.R_):
+                        for i, c in enumerate(n.rC_):
                             if c is _C: # remove mo mapping to culled _C
-                                n.mo_.pop(i); n.R_.pop(i); break
+                                n.mo_.pop(i); n.rC_.pop(i); break
             else: break  # the rest is weaker
         if Dm/Do > Ave:  # dval vs. dolp, overlap increases as Cs may expand in each loop
             _C_ = C_
@@ -621,7 +621,7 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, fC=0, init=1):  # updates
             Ft = Copy_(F_[0], G, init)  # init fork T
             if ft=='Nt' and init and not Ft.nest:  # convert->H for Nt, not Lt,Bt,Ct
                 l0=Ft; l0.N_=[]; Ft=Copy_(Ft,root,init); Ft.nest+=1; Ft.N_ = [l0]  # H, empty lev0.N_
-            for F in F_[1:]: add_N(Ft,F, fC, froot=not fC)  # if F.nest: concat lower lev.N_ in add_N
+            for F in F_[1:]: add_N(Ft,F, fC if ft == 'Nt' or ft == 'Ct' else 0, froot=not fC); Ft.N_ += [F]  # if F.nest: concat lower lev.N_ in add_N (fC is true only for Nt and Ct? We didn't assign c params such as mo_ to links)
             setattr(G, ft,Ft)
             G.dTT += Ft.dTT; G.c += Ft.c  # add rc, fork rc?
     if G.Lt:
@@ -640,10 +640,10 @@ def add_N(N, n, fC=0, froot=0, merge=0):  # rn = n.n / mean.n
     if froot:
         n.fin = 1; n.root = N
     _cnt, cnt = N.c,n.c; Cnt = _cnt+cnt+1  # weigh contribution of intensive params
-    if fC: n.rc = np.sum([mo[1] for mo in n._mo_]); N.R_ += n.R_; N.mo_ += n.mo_
-    else:  N.rc = (N.rc*_cnt)+(n.rc*cnt) / Cnt
+    if fC: n.rc = np.sum([mo[1] for mo in n._mo_]); N.rC_ += n.rC_; N.mo_ += n.mo_
+    else:  N.rc = ((N.rc*_cnt)+(n.rc*cnt)) / Cnt
     N.dTT = (N.dTT*_cnt + n.dTT*cnt) / Cnt
-    N.c = (N.c*_cnt)+(n.c*cnt) / Cnt  # cnt / mass, same for centroids?
+    N.c = ((N.c*_cnt)+(n.c*cnt)) / Cnt  # cnt / mass, same for centroids?  (so we need additional bracket, else division is done first )
     N.C_ += [C for C in n.C_ if C not in N.C_]  # centroids, concat regardless
     if merge:  # only for levels?
         for L_,l_ in zip((N.N_,N.B_,N.C_,N.L_), (n.N_,n.B_,n.C_,n.L_)):
@@ -653,12 +653,15 @@ def add_N(N, n, fC=0, froot=0, merge=0):  # rn = n.n / mean.n
         N.baseT= (N.baseT*_cnt+n.baseT*cnt) / Cnt
         N.mang = (N.mang*_cnt + n.mang*cnt) / Cnt
         N.span = (N.span*_cnt + n.span*cnt) / Cnt
-        N.angl = (N.angl*_cnt + n.angl[0]*cnt) / Cnt  # vect only?
+        N.angl[0] = (N.angl[0]*_cnt + n.angl[0]*cnt) / Cnt  # vect only?
         A,a = N.angl[0],n.angl[0]; A[:] = (A*_cnt+a*cnt) / Cnt  # not sure
-        N.yx += [n.yx]  # weigh by Cnt?
+        if isinstance(N.yx, list): N.yx += [n.yx]  # weigh by Cnt? (optional when yx is list only?)
         N.box = extend_box(N.box, n.box)
-        for Ft, ft in zip((N.Bt, N.Ct, N.Nt, N.Lt), (n.Bt, n.Ct, n.Nt, n.Lt)):
-            if ft: add_N(Ft, ft)  # Ft maybe empty CN, weigh by Cnt?
+        for par in 'Bt', 'Ct', 'Nt', 'Lt':
+            Ft = getattr(N, par); ft = getattr(n, par)
+            if ft:
+                if isinstance(Ft, CN): add_N(Ft, ft, merge=1)  # Ft maybe empty CN, weigh by Cnt?
+                else:                  setattr(N, par, Copy_(ft, root=N))
         for L in n.rim:
             if L.m > ave: N.L_ += [L]
             else: N.B_ += [L]
@@ -826,8 +829,8 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     L_ = []; cT_ = set()  # comp pairs
     for N in N_: N.fin = 0
     for N in N_:
-        _N_ = [B for rB in N.R_ if rB.Bt for B in rB.B_ if B is not N]  # temporary
-        if N.Bt: _N_ += [rB for B in N.Bt.N_ for rB in B.R_ if rB is not N]
+        _N_ = [B for rB in N.rB_ if rB.Bt for B in rB.B_ if B is not N]  # temporary
+        if N.Bt: _N_ += [rB for B in N.Bt.N_ for rB in B.rB_ if rB is not N]
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
