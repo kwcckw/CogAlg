@@ -113,7 +113,7 @@ def val_(TT, rc, fi=1, mw=1, rn=.5, _TT=None):  # m,d eval per cluster, rn = n /
 def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering, fT: convert return to tuple
 
     N_, mL_,mTT,mc, dL_,dTT,dc = comp_C_(root.N_,rc) if fC else comp_N_(root.N_,rc)  # rc: rdn+olp
-    uN, uB = 0,0  # updated Nt, Bt
+    uN, uB = 0,0; irc = root.rc  # updated Nt, Bt
     # m fork:
     if len(mL_)>1 and val_(mTT, rc+compw, mw=(len(mL_)-1)*Lw) > 0:
         root.L_= mL_; Lt = sum_N_(mL_,rc, root); root_update(root, Lt)  # new ders
@@ -125,10 +125,11 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering, fT: 
         root.B_=dL_; Bt = sum_N_(dL_,rc, root); root.Bt = Bt; root_update(root, Bt)  # new ders
         uB = cross_comp(Bt, rc+compw+1, fC*2)  # root.Bt update
         if uB: form_B__(root)  # add boundary to N and N to Bg R_s, no root update?
-    rc = root.rc  # updated
+    rc = root.rc if root.rc != irc else rc  # updated
     if val_(mTT, rc+3+contw, mw=(len(root.N_)-1)*Lw) > 0:  # mval only
         trace_edge(root, rc+3)  # comp Ns with shared N.B_.nt |Bt
-    if val_(root.dTT, rc+compw+3, mw=(len(root.N_)-1)*Lw, _TT=mTT) > 0:
+    # i'm getting true here when both mfork and dfork are false, and root.rc is not updated, so it runs endlessly
+    if irc != rc and val_(root.dTT, rc+compw+3, mw=(len(root.N_)-1)*Lw, _TT=mTT) > 0: 
         cross_comp(root, rc+3)
         # connectivity agg+, fC=0
     return uN or uB
@@ -245,14 +246,14 @@ def comp_sub(_N,N, rc, root):  # unpack node trees down to numericals and compar
     for _F_,F_,dF_ in zip((_N.N_,_N.B_,_N.C_), (N.N_,N.B_,N.C_), ('N_','B_','C_')):  # + tN_,tB_,tC_ from trans_cluster?
         if _F_ and F_:
             N_,L_,mTT,mc, B_,dTT,dc = comp_C_(_F_,rc,F_)  # L_,B_ trans-links
-            tt=mTT+dTT; root.dTT+=tt; root.c=mc+dc; setattr(root, dF_, L_+B_)  # +rc, weigh by C?
+            tt=mTT+dTT; root.dTT+=tt; root.c=mc+dc; setattr(root, dF_, L_+B_)  # +rc, weigh by C? Link.N_ always empty
     if _N.nest and N.nest:
         _H, H = _N.Nt.N_,N.Nt.N_  # no comp Bt,Ct: external to N,_N?
         dH = []; TT=np.zeros((2,9)); C=0
         for _lev,lev in zip(_H[1:], H[1:]):  # skip redundant 1st lev, must be >1 levels
             tt = comp_derT(_lev.dTT[1], lev.dTT[1]); m,d = vt_(tt); c= min(_lev.c,lev.c); TT+=tt; C+=c
             dlev = CN(typ=1, dTT=tt, m=m,d=d,c=c, rc=min(_lev.rc,lev.rc), root=root)
-            if _lev.Nt.nest and lev.Nt.nest and m > ave*rc:
+            if _lev.Nt and _lev.Nt.nest and lev.Nt and lev.Nt.nest and m > ave*rc:
                 comp_sub(_lev,lev, rc,dlev)  # dlev += sub-recursion
             dH += [dlev]
         nt = sum_N_(root.N_, rc); nt.N_=[]; root.nest+=1  # root is link, nt is lev0, nest=0
@@ -608,6 +609,7 @@ def Copy_(N, root=None, init=0):  # not updated
         else:
             C.N_,C.L_ = list(N.N_),list(N.L_)
             C.angl = copy(N.angl); N.root = root or N.root; C.yx = copy(N.yx); C.typ = N.typ  # else 1
+        if hasattr(N, 'mo_'): C.mo_ = deepcopy(N.mo_)  # special case
     return C
 
 def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root if not init
@@ -637,7 +639,7 @@ def add_N(N, n, froot=0, merge=0):
     fC = hasattr(n,'mo_')
     if froot: n.fin = 1; n.root = N
     _cnt, cnt = N.c,n.c; Cnt = _cnt+cnt+1  # weigh contribution of intensive params
-    if fC: n.rc = np.sum([mo[1] for mo in n._mo_]); N.rC_ += n.rC_; N.mo_ += n.mo_  # centroid
+    if fC: n.rc = np.sum([mo[1] for mo in n._mo_]); N.rC_ += n.rC_; setattr(N, 'mo_', N.mo_+n.mo_) if hasattr(N, 'mo_') else setattr(N, 'mo_', deepcopy(n.mo_))  # centroid (init or sum mo_)
     else:  N.rc = (N.rc*_cnt + n.rc*cnt) / Cnt
     N.dTT = (N.dTT*_cnt + n.dTT*cnt) / Cnt
     N.c = (N.c*_cnt + n.c*cnt) / Cnt  # cnt / mass, same for centroids?
