@@ -198,10 +198,8 @@ def comp_N_(iN_,rc,_iN_=[]):
         elif eV * ((len(pVt_)-1)*Lw) > specw:  # spec over rim, nested spec N_, not L_
             eTT = np.zeros((2,9))  # comb forks?
             for _dist,_dy_dx,__N,_V in pVt_:
-                pTT,pV = proj_N(N,_dist,_dy_dx, rc)
-                if pV>0: eTT += pTT  # +ve only?
-                pTT,pV = proj_N(N,_dist,-_dy_dx, rc)
-                if pV>0: eTT += pTT
+                eTT += proj_N(N,_dist,_dy_dx, rc)  # if pV>0: eTT += pTT  # +ve only?
+                eTT += proj_N(_N,_dist,-_dy_dx, rc)
             return iV + val_(eTT,rc)
         else: return V
 
@@ -218,13 +216,14 @@ def comp_N_(iN_,rc,_iN_=[]):
         for dist, dy_dx, _N in N.pL_:  # rim angl not canonic
             O = (N.rc +_N.rc) / 2; Ave = ave*rc*O
             V = proj_V(_N,N, dist, Ave, pVt_)
-            if V > Ave:
+            if (1-abs(V)) > Ave:
+                # projected surprise value: comp if marginal predictability
                 Link = comp_N(_N,N, O+rc, A=dy_dx, span=dist)
                 if   Link.m > ave*(contw+rc): L_+=[Link]; mTT+=Link.dTT; mc+=Link.c; N_ += [_N,N]  # combined CN dTT and L_
                 elif Link.d > avd*(contw+rc): B_+=[Link]; dTT+=Link.dTT; dc+=Link.c  # no overlap to simplify
                 pVt_ += [[dist, dy_dx, _N, Link.m-ave*rc]]  # for distant rim eval
-            else:
-                break  # no induction
+            elif -V > Ave:
+                break  # beyond induction range
     return list(set(N_)), L_,mTT,mc, B_,dTT,dc
 
 def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optional angl,span,dang?
@@ -361,7 +360,7 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
                 if val_(L.dTT,rc+compw, fi=0) < 0:  # merge
                     _N, N = L.nt
                     if _N is not N:  # not merged
-                        add_N(_N,N,froot=1,merge=1)  # fin,root.rim (special case here, where merge should be 1 as well)
+                        add_N(_N,N,froot=1, merge=1)  # merge Cs, set fin,root.rim
                         for l in N.rim: l.nt = [_N if n is N else n for n in l.nt]
                         if N in N_: N_.remove(N)  # if multiple merging
                         N_ += [_N]
@@ -511,7 +510,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         _Ct_ = [[c, c.m/c.c if c.m !=0 else eps, c.rc] for c in _C_]
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave * _o:
-                C = cent_attr( sum_N_(_C.N_, rc, root, fC=1), rc)  # C update lags behind N_; non-local C.rc += N.mo_ os?
+                C = cent_attr( sum_N_(_C.N_, rc, root), rc)  # C update lags behind N_; non-local C.rc += N.mo_ os?
                 _N_,_N__, mo_, M,D,O,comp,dTT,dm,do = [],[],[],0,0,0,0,np.zeros((2,9)),0,0  # per C
                 for n in _C._N_:  # core+ surround
                     if C in n.rC_: continue
@@ -611,7 +610,7 @@ def Copy_(N, root=None, init=0):  # not updated
             C.angl = copy(N.angl); N.root = root or N.root; C.yx = copy(N.yx); C.typ = N.typ  # else 1
     return C
 
-def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, fC=0, init=1):  # updates root if not init
+def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root if not init
 
     if init: G = CN(nest=root.nest if root else 1, N_=N_,L_=L_,B_=B_,C_=C_, rc=rc, rng=rng, root=root)  # new cluster
     else:    G = root; G.dTT=np.zeros((2,9)); G.c=0  # replace all
@@ -619,11 +618,9 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, fC=0, init=1):  # updates
         setattr(G, f_,F_)
         if F_:
             Ft = Copy_(F_[0], G, init)  # init fork T
-            if ft=='Nt' and init and not Ft.nest:  # convert->H for Nt, not Lt,Bt,Ct
-                l0=Ft; l0.N_=[]; Ft=Copy_(Ft,root,init); Ft.nest+=1; Ft.N_ = [l0]  # H, empty lev0.N_
-            for F in F_[1:]: add_N(Ft,F, fC if ft == 'Nt' or ft == 'Ct' else 0, froot=not fC); Ft.N_ += [F]  # if F.nest: concat lower lev.N_ in add_N (fC is true only for Nt and Ct? We didn't assign c params such as mo_ to links)
-            setattr(G, ft,Ft)
-            G.dTT += Ft.dTT; G.c += Ft.c  # add rc, fork rc?
+            if ft=='Nt' and init and not Ft.nest: l0=Ft; l0.N_=[]; Ft=Copy_(Ft,root,init); Ft.nest+=1; Ft.N_ = [l0]  # convert->H for Nt, not Lt,Bt,Ct
+            for F in F_[1:]: add_N(Ft,F, merge=Ft.nest and F.nest); Ft.N_+=[F]  # merge levels in shifted-down F.N_
+            setattr(G, ft, Ft); root_update(G, Ft)
     if G.Lt:
         G.angl = np.array([G.Lt.angl[0], np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # canonical angle dir = mean diff sign
     if init:  # root span and position don't change
@@ -635,19 +632,19 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, fC=0, init=1):  # updates
     G.m,G.d = vt_(G.dTT)
     return G
 
-def add_N(N, n, fC=0, froot=0, merge=0):  # rn = n.n / mean.n
+def add_N(N, n, froot=0, merge=0):
 
-    if froot:
-        n.fin = 1; n.root = N
+    fC = hasattr(n,'mo_')
+    if froot: n.fin = 1; n.root = N
     _cnt, cnt = N.c,n.c; Cnt = _cnt+cnt+1  # weigh contribution of intensive params
-    if fC: n.rc = np.sum([mo[1] for mo in n._mo_]); N.rC_ += n.rC_; N.mo_ += n.mo_
-    else:  N.rc = ((N.rc*_cnt)+(n.rc*cnt)) / Cnt
+    if fC: n.rc = np.sum([mo[1] for mo in n._mo_]); N.rC_ += n.rC_; N.mo_ += n.mo_  # centroid
+    else:  N.rc = (N.rc*_cnt + n.rc*cnt) / Cnt
     N.dTT = (N.dTT*_cnt + n.dTT*cnt) / Cnt
-    N.c = ((N.c*_cnt)+(n.c*cnt)) / Cnt  # cnt / mass, same for centroids?  (so we need additional bracket, else division is done first )
+    N.c = (N.c*_cnt + n.c*cnt) / Cnt  # cnt / mass, same for centroids?
     N.C_ += [C for C in n.C_ if C not in N.C_]  # centroids, concat regardless
-    if merge:  # only for levels?
+    if merge:  # for levels and C_
         for L_,l_ in zip((N.N_,N.B_,N.C_,N.L_), (n.N_,n.B_,n.C_,n.L_)):
-            L_ += l_ # concat, all maybe empty
+            L_ += l_ if fC else []+l_  # concat, all maybe empty, shift down nt.H?
     if N.typ:
         N.eTT  = (N.eTT *_cnt + n.eTT *cnt) / Cnt
         N.baseT= (N.baseT*_cnt+n.baseT*cnt) / Cnt
@@ -655,13 +652,12 @@ def add_N(N, n, fC=0, froot=0, merge=0):  # rn = n.n / mean.n
         N.span = (N.span*_cnt + n.span*cnt) / Cnt
         N.angl[0] = (N.angl[0]*_cnt + n.angl[0]*cnt) / Cnt  # vect only?
         A,a = N.angl[0],n.angl[0]; A[:] = (A*_cnt+a*cnt) / Cnt  # not sure
-        if isinstance(N.yx, list): N.yx += [n.yx]  # weigh by Cnt? (optional when yx is list only?)
+        if isinstance(N.yx, list): N.yx += [n.yx]  # weigh by Cnt?
         N.box = extend_box(N.box, n.box)
-        for par in 'Bt', 'Ct', 'Nt', 'Lt':
-            Ft = getattr(N, par); ft = getattr(n, par)
+        for Ft,ft,par in zip((N.Bt, N.Ct, N.Nt, N.Lt), (n.Bt, n.Ct, n.Nt, n.Lt),('Bt','Ct','Nt','Lt')):
             if ft:
-                if isinstance(Ft, CN): add_N(Ft, ft, merge=1)  # Ft maybe empty CN, weigh by Cnt?
-                else:                  setattr(N, par, Copy_(ft, root=N))
+                if Ft: add_N(Ft, ft)
+                else:  setattr(N,par, Copy_(ft, root=N))
         for L in n.rim:
             if L.m > ave: N.L_ += [L]
             else: N.B_ += [L]
@@ -777,11 +773,11 @@ def proj_N(N, dist, A, rc):  # arg rc += N.rc+contw, recursively specify N proje
     cos_d = (N.angl[0].dot(A) / (np.hypot(*N.angl[0]) * dist)) * N.angl[1]  # internal x external angle alignment
     iTT, eTT = np.zeros((2,9)), np.zeros((2,9))
 
-    for L in N.L_+N.B_: proj_TT(L, cos_d, dist, L.rc+rc, iTT)  # accum iTT internally
+    for L in N.L_+N.B_: proj_TT(L, cos_d, dist, L.rc+rc, iTT)  # accum TT internally
     for L in N.rim:     proj_TT(L, cos_d, dist, L.rc+rc, eTT)
     pTT = iTT + eTT  # projected int,ext links, work the same?
-    # info_gain = N.m * average link uncertainty in 0:1:
-    return pTT, val_(N.dTT,rc) * (1- val_(iTT+eTT, rc))
+
+    return pTT  # val_(N.dTT,rc) * (1- val_(iTT+eTT, rc))  # info_gain = N.m * average link uncertainty, should be separate
 '''
 add comp_prj_nt?
 def comp_prj_dH(_N, N, ddH, rn, link, angl, span, dec):
@@ -882,7 +878,8 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
             if not elev: Fg = base_tile(iy,ix)  # 1st level or cross_comped arg tile
             if Fg and val_(Fg.dTT, Fg.rc+compw+elev, mw=(len(Fg.N_)-1)*Lw) > 0:
                 tile[y,x] = Fg; Fg_ += [Fg]; dy_dx = np.array([Fg.yx[0]-y,Fg.yx[1]-x])
-                if proj_N(Fg, np.hypot(*dy_dx), dy_dx, elev)[1] > 0:  # pV
+                pTT = proj_N(Fg, np.hypot(*dy_dx), dy_dx, elev)[1]
+                if 1- abs(val_(pTT, rc=elev) > ave):  # search if marginal predictability
                     # extend lev by feedback within current tile:
                     proj_focus(PV__,y,x,Fg)  # PV__+= pV__
                     pv__ = PV__.copy(); pv__[tile!=None] = 0  # exclude processed
