@@ -57,7 +57,7 @@ class CN(CBase):
         n.em, n.ed, n.ec = kwargs.get('em',0),kwargs.get('ed',0),kwargs.get('ec',0)  # sum eTT
         n.rc  = kwargs.get('rc', 1)  # redundancy to ext Gs, ave in links?
         n.N_, n.B_, n.C_, n.L_ = kwargs.get('N_',[]), kwargs.get('B_',[]), kwargs.get('C_',[]), kwargs.get('L_',[])  # base elements
-        n.Nt, n.Bt, n.Ct, n.Lt = kwargs.get('Nt',[]), kwargs.get('Bt',[]), kwargs.get('Ct',[]), kwargs.get('Lt',[])  # nested elements
+        n._Nt, n._Bt, n._Ct, n._Lt = kwargs.get('Nt',[]), kwargs.get('Bt',[]), kwargs.get('Ct',[]), kwargs.get('Lt',[])  # nested elements
         # Nt.N_ = H[1:], empty if not nested or in alt forks
         n.nest  = kwargs.get('nest',0)  # nesting in H levels? top-down in Nt, bottom-up in alt forks
         n.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,A: not ders, not in links
@@ -76,7 +76,30 @@ class CN(CBase):
         n.rB_, n.rC_ = kwargs.get('rB_',[]), kwargs.get('rC_',[])
         n.tNt, n.tBt, n.tCt = kwargs.get('tNt',[]), kwargs.get('tBt',[]), kwargs.get('tCt',[])
         # n.fork_tree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
+    
+    def to_cn(n, val, attr): 
+        if isinstance(val, list): val = CN(); setattr(n, attr, val)
+        return val
+        
+    @property 
+    def Nt(n): return n.to_cn(n._Nt,'_Nt')
+    @Nt.setter
+    def Nt(n, value): n._Nt = value
+    @property 
+    def Bt(n): return n.to_cn(n._Bt,'_Bt')
+    @Bt.setter
+    def Bt(n, value): n._Bt = value
+    @property 
+    def Ct(n): return n.to_cn(n._Ct,'_Ct')
+    @Ct.setter
+    def Ct(n, value): n._Ct = value
+    @property
+    def Lt(n): return n.to_cn(n._Lt,'_Lt')
+    @Lt.setter
+    def Lt(n, value): n._Lt = value
+
     def __bool__(n): return bool(n.N_)
+
 
 ave, avd, arn, aI, aS, aveB, aveR, Lw, intw, compw, centw, contw = .3, .2, 1.2, 100, 5, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
 dec = ave / (ave+avd)  # match decay per unit dist
@@ -109,7 +132,7 @@ def val_(TT, rc, fi=1, mw=1, rn=.5, _TT=None):  # m,d eval per cluster, rn = n /
         _rv = _TT[0] / (_t_+eps) @ wTTf[0] if fi else _TT[1] / (_t_+eps) @ wTTf[1]
         rv = rv * (1-rn) + _rv * rn  # add borrowed root | boundary alt fork val?
 
-    return rv * mw - (ave if fi else avd) * rc
+    return rv * mw - (ave if fi else avd) * rc  # the return value may still > 0 if rc == 0
 
 def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering, fT: convert return to tuple
 
@@ -149,7 +172,7 @@ def form_B__(G):  # assign boundary / background per node from Bt, no root updat
     def R(L):
         root = L.root
         if root:
-            if root not in Bt.rB_: root = R(L.root)
+            if root not in Bt.N_: root = R(L.root)  # should be Bt.N_ here? Because L.root is dgraph and it is in Bt.N_
         else: _N = L.nt[0] if L.nt[1] is N else L.n[1]; root = _N.root  # direct L mediation
         return root
     for N in G.N_:
@@ -838,7 +861,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     for N in N_: N.fin = 0
     for N in N_:
         _N_ = [B for rB in N.rB_ if rB.Bt for B in rB.B_ if B is not N]  # temporary
-        if N.Bt: _N_ += [rB for B in N.Bt.N_ for rB in B.rB_ if rB is not N]
+        if N.Bt: _N_ += [rB for B in N.Bt.N_ for rB in B.rB_ if rB is not N] + [rB for rB in N.rB_]  # + node's mediated
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
@@ -880,7 +903,8 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
 
         Fg = frame_blobs_root( comp_pixel( image[y:y+Ly, x:x+Lx]), rV)
         Fg = vect_edge(Fg, rV, wTTf); Fg.L_=[]  # form, trace PP_
-        return cross_comp(Fg, rc=Fg.rc)
+        cross_comp(Fg, rc=Fg.rc)
+        return Fg
 
     def expand_lev(_iy,_ix, elev, Fg):  # seed tile is pixels in 1st lev, or Fg in higher levs
 
@@ -891,7 +915,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
             if not elev: Fg = base_tile(iy,ix)  # 1st level or cross_comped arg tile
             if Fg and val_(Fg.dTT, Fg.rc+compw+elev, mw=(len(Fg.N_)-1)*Lw) > 0:
                 tile[y,x] = Fg; Fg_ += [Fg]; dy_dx = np.array([Fg.yx[0]-y,Fg.yx[1]-x])
-                pTT = proj_N(Fg, np.hypot(*dy_dx), dy_dx, elev)[1]
+                pTT = proj_N(Fg, np.hypot(*dy_dx), dy_dx, elev)  # [1] is not needed now
                 if 1- abs(val_(pTT, rc=elev) > ave):  # search in marginal predictability
                     # extend lev by feedback within current tile:
                     proj_focus(PV__,y,x,Fg)  # PV__+= pV__
