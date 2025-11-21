@@ -75,6 +75,7 @@ class CN(CBase):
         n.compared = set()
         n.rB_, n.rC_ = kwargs.get('rB_',[]), kwargs.get('rC_',[])
         n.tNt, n.tBt, n.tCt = kwargs.get('tNt',[]), kwargs.get('tBt',[]), kwargs.get('tCt',[])
+        n.pre = []  # prelinks
         # n.fork_tree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
     def __bool__(n): return bool(n.c)
 
@@ -195,7 +196,7 @@ def comp_N_(iN_,rc,_iN_=[]):
                 if   Link.m > ave*(contw+rc): L_+=[Link]; mTT+=Link.dTT; mc+=Link.c; N_ += [_N,N]  # combined CN dTT and L_
                 elif Link.d > avd*(contw+rc): B_+=[Link]; dTT+=Link.dTT; dc+=Link.c  # no overlap to simplify
                 pVt_ += [[dist, dy_dx, _N, Link.m-ave*rc]]  # for distant rim eval
-            elif V > Ave: pass  # stor pre-link, not sure how
+            elif V > Ave: N.pre_+=[_N]; _N.pre_+=[N]   # stor pre-link, not sure how (probably pack them bidirectionally first?)
             else:  # -V > Ave:
                 break  # beyond induction range
     return list(set(N_)), L_,mTT,mc, B_,dTT,dc
@@ -220,19 +221,21 @@ def comp_sub(_N,N, rc, root):  # unpack node trees down to numericals and compar
     for _F_,F_,nF_,nFt in zip((_N.N_,_N.B_,_N.C_), (N.N_,N.B_,N.C_), ('N_','B_','C_'),('Nt','Bt','Ct')):  # + tN_,tB_,tC_ from trans_cluster?
         if _F_ and F_:
             Rc += 1
-            N_,L_,mTT,mc, B_,dTT,dc = comp_C_(_F_,Rc,F_)  # L_,B_ trans-links
-            dF_ = L_+B_;  dFt = sum_N_(dF_, Rc)  # dFt.dTT = mTT+dTT?
-            if nFt=='Nt': dFt.N_=[]  # empty H[1:], in Nt only?
-            setattr(root, nF_,dF_); setattr(root, nFt,dFt)
-            root_update(root, dFt)
+            N_,L_,mTT,mc, B_,dTT,dc = comp_C_(_F_,Rc,F_); dF_ = L_+B_  # L_,B_ trans-links          
+            if dF_:  # may empty
+                dFt = sum_N_(dF_, Rc)  # dFt.dTT = mTT+dTT?
+                if nFt=='Nt': dFt.N_=[]  # empty H[1:], in Nt only?
+                setattr(root, nF_,dF_); setattr(root, nFt,dFt)
+                root_update(root, dFt)
     if not (_N.Nt and N.Nt): return  # no comp Bt,Ct: external to N,_N
     _H,H = _N.Nt.N_, N.Nt.N_  # levels[1:]
     for _lev,lev in zip(_H, H):
         tt = comp_derT(_lev.dTT[1], lev.dTT[1]); m,d = vt_(tt)
         dlev = CN(dTT=tt, m=m,d=d, c=min(_lev.c,lev.c), rc=min(_lev.rc,lev.rc), root=root)  # min: only shared elements are compared
         Rc += 1  # deeper levels are redundant
-        if _lev.Nt.N_ and lev.Nt.N_ and m > ave * Rc:
+        if _lev.Nt and _lev.Nt.N_ and lev.Nt and lev.Nt.N_ and m > ave * Rc:  # we need to check if lev.Nt to make sure they are not list
             comp_sub(_lev,lev, Rc, dlev)  # dlev.N_+=sub_N_, dlev.Nt+=sub_Nt?
+        if isinstance(root.Nt, list): root.Nt = CN()  # just CN? We probably need to ad other params from dlev into Nt?
         root.Nt.N_ += [dlev]
         root_update(root.Nt, dlev); root_update(root, dlev)  # root is link
 
@@ -664,10 +667,17 @@ def add_N(N, n, froot=0, merge=0):
         A,a = N.angl[0],n.angl[0]; A[:] = (A*_cnt+a*cnt) / Cnt  # not sure
         if isinstance(N.yx, list): N.yx += [n.yx]  # weigh by Cnt?
         N.box = extend_box(N.box, n.box)
-        for Ft,ft,par in zip((N.Bt, N.Ct, N.Nt, N.Lt), (n.Bt, n.Ct, n.Nt, n.Lt),('Bt','Ct','Nt','Lt')):  # add 'tBt','tCt','tNt'?
+        for Ft,ft,f_,par in zip((N.Bt, N.Ct, N.Nt, N.Lt), (n.Bt, n.Ct, n.Nt, n.Lt),(n.B_,n.C_,n.N_,n.L_),('Bt','Ct','Nt','Lt')):  # add 'tBt','tCt','tNt'?
             if ft:
-                if Ft: add_N(Ft, ft, froot, merge)  # as above, merge top level only, sequentially?
+                if Ft: add_N(Ft, ft)
                 else:  setattr(N,par, Copy_(ft, root=N))
+            # something like this?
+            elif f_ and isinstance(f_[0], CN):  # Nt is empty, add N_ only (skip CPs)
+                if Ft:
+                    if Ft.nest>0: Ft.N_[0].N_ += f_  # nest >0, merge first level of n_
+                    else:         Ft.N_ += f_   # nest == 0, Ft.N_ is n_
+                else:
+                    setattr(N,par,sum_N_(f_, rc=sum([f.rc for f in f_]),root=N))  # not sure on rc  
         for L in n.rim:
             if L.m > ave: N.L_ += [L]
             else: N.B_ += [L]
@@ -769,7 +779,7 @@ def proj_TT(L, cos_d, dist, rc, pTT, fdec=0):  # accumulate link pTT with iTT or
     TT = np.array([L.dTT[0] * dec, L.dTT[1] * cos_d * dec])
     cert = abs(val_(TT,rc) - ave)  # approximation
     if cert > ave: pTT+=TT; return # certainty margin = ave
-    if L.Nt.nest:
+    if L.Nt and L.Nt.nest:
         for lev in L.Nt.N_:  # accum refined pTT
             proj_TT(lev, cos_d, dec, rc+1, pTT, fdec=1)
     else: pTT += TT  # L.dTT is redundant to H, neither is redundant to Bt,Ct
