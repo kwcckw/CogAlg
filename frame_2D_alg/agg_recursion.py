@@ -647,8 +647,12 @@ def sum_N_(N_,rc=1, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates roo
     for ft,f_,F_ in zip(('Nt','Bt','Ct','Lt'),('N_','B_','C_','L_'), (N_,B_,C_,L_)):  # add tFs?
         setattr(G, f_,F_)
         if F_:
+            # if F.N_ is empty, skip the process?
             F = F_[0]; Ft = Copy_(F, G, init)  # init fork T
-            if ft=='Nt' and init: Ft.nest+=1; Ft.N_=[F]; Ft.Nt.N_ = [sum_N_(F.N_,rc,root=Ft.Nt)] + F.Nt.N_  # convert Nt.N_ to deeper H
+            if not F.N_: continue
+            if ft=='Nt' and init: 
+                # not sure if there's a better method, copy if F is PP, their N_ is CP
+                Ft.nest+=1; Ft.N_=[F]; Ft.Nt.N_ = [sum_N_(F.N_,rc,root=Ft.Nt) if isinstance(F.N_[0], CN) else Copy_(F, root=G) ] + F.Nt.N_  # convert Nt.N_ to deeper H
             for F in F_[1:]: Ft.N_ += [F]; add_N(Ft, F, merge=ft=='Nt')  # merge H only?
             setattr(G, ft, Ft); root_update(G, Ft)
     if G.Lt:
@@ -677,7 +681,7 @@ def add_N(N, n, froot=0, merge=0):
             if i:  # flat Bt,Ct,Lt, also merge?
                 if T and t: T_ += t_; add_N(T, t)
             else:  # Nt.N_ is H, concat levels in nested add_N called in sum_N_ init
-                add_N(T.Nt.N_[0], sum_N_(t_, root=T.Nt))  # new top level
+                add_N(T.N_[0], sum_N_(t_, root=T.Nt) if isinstance(t_[0], CN) else Copy_(n, root=T))  # new top level (should be T.N_ here? T is already Nt here)
                 for Lev,lev in zip(T.Nt.N_[1:], t.Nt.N_): add_N(Lev,lev)  # existing lower levels
     if N.typ:
         N.eTT  = (N.eTT *_cnt + n.eTT *cnt) / C
@@ -886,7 +890,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
         if not merged and val_(dtt,rc,mw=(len(n_)-1)*Lw) > 0:
             G_ += [sum_N_(n_,olp,root,l_)]  # include singletons
     for N in N_: N.fin = 0
-    root.N_ = G_
+    root.N_ = G_  # so root.N_ may empty here
     return 1 if G_ else 0
 
 # frame expansion per level: cross_comp lower-window N_,C_, forward results to next lev, project feedback to scan new lower windows
