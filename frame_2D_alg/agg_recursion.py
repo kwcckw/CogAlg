@@ -240,6 +240,7 @@ def comp_sub(_N,N, rc, root):  # unpack node trees down to numericals and compar
     Rc = rc
     for _F_,F_,nF_,nFt in zip((_N.N_,_N.B_,_N.C_), (N.N_,N.B_,N.C_), ('N_','B_','C_'),('Nt','Bt','Ct')):  # + tN_,tB_,tC_ from trans_cluster?
         if _F_ and F_:
+            # in comp_C_, we have "C_ += [C for C in _C_ if C not in C_]", is it necessary to merge _N.N_ to N,N_ here when Ns are nodes?
             N_,L_,mTT,mc, B_,dTT,dc = comp_C_(_F_,Rc,F_); dF_ = L_+B_  # trans-links
             if dF_:
                 dFt = sum2T(dF_, Rc, root, mTT+dTT, mc+dc)
@@ -270,7 +271,7 @@ def sum2T(N_, rc, root, TT=None, c=1, flat=1):
     else:
         Nt.N_ = [N_]  # only N_, alt forks are nested
     if flat or not fTT:  # else nothing to accum
-        for N in N_[1:]: add2T(Nt, N, fTT)
+        for N in N_[1:]: add2T(Nt, N, fTT)  # flat always 1 here, then flat in add2T is actually redundant now?
     if fTT: Nt.dTT=TT; Nt.c=c
     for nFt, nF_, F_ in zip(('Nt','Bt','Ct','Lt'),('N_','B_','C_','L_'), (Nt.N_, Nt.B_,Nt.C_,Nt.L_)):  # add tFs?
         if F_:
@@ -651,7 +652,7 @@ def form_B__(G):  # assign boundary / background per node from Bt, no root updat
         root = L.root
         if root:
             if root not in Bt.N_: root = R(L.root)
-        else: _N = L.nt[0] if L.nt[1] is N else L.n[1]; root = _N.root  # direct L mediation
+        else: _N = L.nt[0] if L.nt[1] is N else L.nt[1]; root = _N.root  # direct L mediation
         return root
     for N in G.N_:
         if N.sub or not N.B_: continue
@@ -674,7 +675,8 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root 
         setattr(G, f_,F_)
         if F_:
             F= F_[0]; Ft = Copy_(F, G, init)  # init fork T, composition H = [[N_], Nt.N_]
-            if ft=='Nt' and init: Ft.nest+=1; Ft.N_=[F]; Ft.Nt.N_ = [sum_N_(F.N_,rc,root=Ft.Nt)] + F.Nt.N_  # convert Nt.N_ to deeper H
+            if ft=='Nt' and init: 
+                Ft.nest+=1; Ft.N_=[F]; Ft.Nt.N_ = [sum_N_(F.N_,rc,root=Ft.Nt) if F.N_ else Copy_(F, root=Ft.Nt)] + F.Nt.N_  # convert Nt.N_ to deeper H (F.N_ may empty now if F is PP, so use Copy instead)
             for F in F_[1:]:
                 Ft.N_ += [F]; add_N(Ft, F, rc, merge=ft=='Nt')  # merge Nt H only
             setattr(G,ft,Ft); root_update(G,Ft)
@@ -703,8 +705,8 @@ def add_N(N, n, rc=1, froot=0, merge=0):
         for i, (T,t, T_,t_) in enumerate(zip((N.Nt,N.Bt,N.Ct,N.Lt), (n.Nt,n.Bt,n.Ct,n.Lt), (N.N_,N.B_,N.C_,N.L_), (n.N_,n.B_,n.C_,n.L_))):  # add 'tBt','tCt','tNt'?
             if i:  # flat Bt,Ct,Lt, also merge?
                 if T and t: T_+=t_; add_N(T,t)
-            else:  # Nt.N_ is H, concat levels in nested add_N:
-                add_N(T.N_[0], sum_N_(t_,rc,root=T.Nt), merge=1)  # n.N_-> N.Nt.N_[0]: top nested level
+            elif T.N_:  # Nt.N_ is H, concat levels in nested add_N: (base level PP.Nt and N_ is empty, skip them)
+                add_N(T.N_[0], sum_N_(t_,rc,root=T.Nt) if t_ else Copy_(n, root=T), merge=1)  # n.N_-> N.Nt.N_[0]: top nested level
                 for Lev,lev in zip_longest(T.N_[1:], t.N_):  # t is n.Nt, existing lower levels, may be empty
                     if Lev and lev: add_N(Lev,lev, rc,merge=1)
                     elif lev: T.N_ += [lev]  # t is deeper
@@ -875,7 +877,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                         if fE and val_(bG.dTT,4, fi=0, mw=(len(bG.N_)-1)*Lw) > 0:
                             trace_edge(bG,4)  # for cross_comp in frame_H?
                 if fE: Edge_ += [Edge]
-    return sum_N_(Edge_,2,None)  # Fg, no root
+    return sum_N_(Edge_,2,None) if Edge_ else CN() # Fg, no root (not sure, return empty CN if Edge_ is empty?)
 
 def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
 
@@ -914,7 +916,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     for n_,l_, dtt,olp, merged in Gt_:
         if not merged and val_(dtt,rc,mw=(len(n_)-1)*Lw) > 0:
             G_ += [sum_N_(n_,olp,root,l_)]  # include singletons
-    for N in N_: N.fin = 0
+    for N in N_: N.fin = 0; setattr(N, 'root',root) if N.root not in G_ else None  # reset root from Gt back to original root if didn't form G
     root.N_ = G_
     return 1 if G_ else 0
 
@@ -926,7 +928,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
 
         Fg = frame_blobs_root( comp_pixel( image[y:y+Ly, x:x+Lx]), rV)
         Fg = vect_edge(Fg, rV, wTTf); Fg.L_=[]  # form, trace PP_
-        cross_comp(Fg, rc=Fg.rc)
+        if Fg: cross_comp(Fg, rc=Fg.rc)
         return Fg
 
     def expand_lev(_iy,_ix, elev, Fg):  # seed tile is pixels in 1st lev, or Fg in higher levs
