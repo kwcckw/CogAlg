@@ -613,8 +613,9 @@ def form_B__(G):  # assign boundary / background per node from Bt, no root updat
 
     Bt = G.Bt
     for bG in Bt.N_:  # add R_ per boundary graph, in Fg?
-        R_ = list({n.root for L in bG.N_ for n in L.nt if n.root and n.root.root is not None}) # core Gs, exclude frame
-        bG.rB_=sorted(R_+[G], key=lambda x:(x.m/x.c), reverse=True)
+        # looks like we need PPd.P_ or PPd.N_ in dfork to get Nt in order to get mfork graphs
+        R_ = list({n.root for L in (bG.P_ if hasattr(bG,'P_') else bG.N_) for n in L.nt if n.root and n.root.root is not None}) # core Gs, exclude frame
+        bG.rB_=sorted(R_, key=lambda x:(x.m/x.c), reverse=True)  # we shouldn't add G here since R_ and G are different levels, R_ is a subset of G.N_
     def R(L):
         root = L.root
         if root:
@@ -653,7 +654,7 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root 
         if F_:
             Ft = sum2T(F_,rc, G); setattr(G,nFt,Ft); root_update(G,Ft)
     if init:  # root span and position don't change
-        G.angl = np.array([np.mean([l.angl[0] for l in G.L_],axis=0), np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # angle dir = mean diff sign
+        if G.L_: G.angl = np.array([np.mean([l.angl[0] for l in G.L_],axis=0), np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # angle dir = mean diff sign
         yx_ = np.array([g.yx for g in N_]); yx = yx_.mean(axis=0); dy_,dx_ = (yx_-yx).T
         G.span = np.hypot(dy_,dx_).mean()  # N centers dist to G center
         G.yx = yx
@@ -674,7 +675,7 @@ def sum2T(N_, rc, root, TT=None, c=1, flat=1):  # simplified for Ft
         if flat: Nt.N_+= N.N_; Nt.B_+=N.B_; Nt.C_+=N.C_; Nt.L_+=N.L_
         if not fTT: Nt.dTT += N.dTT; Nt.c += N.c
     for nFt, nF_, F_ in zip(('Nt','Bt','Ct','Lt'),('N_','B_','C_','L_'), (Nt.N_, Nt.B_,Nt.C_,Nt.L_)):  # add tFs?
-        if F_:
+        if F_ and isinstance(F_[0], CN):  # skip CdP from PP.B_
             F_[:] = list(set(F_))
             Ft = sum2T(F_, rc, root, flat=nFt=='Nt')  # flatten H only
             setattr(Nt, nFt, Ft); root_update(Nt, Ft)
@@ -746,9 +747,10 @@ def PP2N(PP):
                      np.array([dM, dD, dL, dI, dG, dA, dL, dL / 2, eps])])
     y,x,Y,X = box; dy,dx = Y+1-y, X+1-x
     A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
-    PP = CN(typ=3, L_=link_,B_=B_, m=m,d=d,c=c, baseT=baseT, dTT=dTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
+    PP = CN(typ=3,B_=B_, m=m,d=d,c=c, baseT=baseT, dTT=dTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
     for P in P_: P.root = PP
     PP.P_ = P_ # empty N_, PP.Nt = CN(typ=0, dTT=dTT, m=m,d=d,c=c); PP.Lt = CN(typ=0, dTT=sum(l.vert for l in link_))
+    PP.dP_ = link_  # same as P_
     return PP
 
 def ffeedback(root):  # adjust filters: all aves *= rV, ultimately differential backprop per ave?
@@ -856,7 +858,8 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
                 PPm_ = comp_slice(edge, rV, wTTf)
-                Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None); Edge.typ=2; fE=0
+                # right now Edge doesn't have root_update, sum their c manually?
+                Edge = sum_N_([PP2N(PPm) for PPm in PPm_],1,None); Edge.typ=2; Edge.c = sum([n.c for n in Edge.N_]); fE=0
                 if edge.link_:
                     bG = sum_N_([PP2N(PPd) for PPd in edge.link_],2, root=Edge); Edge.Bt = bG
                     form_B__(Edge)  # add Edge.Bt
@@ -865,7 +868,9 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                         if fE and val_(bG.dTT,4, fi=0, mw=(len(bG.N_)-1)*Lw) > 0:
                             trace_edge(bG,4)  # for cross_comp in frame_H?
                 if fE: Edge_ += [Edge]
-    return sum_N_(Edge_,2,None) if Edge_ else []  # Fg, no root
+    if Edge_:
+        Edge = sum_N_(Edge_,2,None); Edge.c = sum([n.c for n in Edge.N_])
+        return Edge
 
 def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
 
