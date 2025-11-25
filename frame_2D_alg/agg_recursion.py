@@ -643,6 +643,7 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root 
     yx_,A = [], np.zeros(2)
     # core forks:
     for i, (nFt,F_) in enumerate(zip(('Nt','Lt'),(G.N_,G.L_))):
+        if not F_: continue  # empty N_ in PP
         Ft = sum2T(F_, rc, G)
         H = []  # concat levels in core fork H: top-down Nt.N_, bottom-up Lt.N_, formed in cross_comp
         for F in F_:
@@ -654,7 +655,7 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root 
                 if lev:
                     if Lev: Lev += lev.N_
                     else:   H += [lev.N_]
-        Ft.N_ = [ sum2T(n_, rc, G) for n_ in [F_]+H]  # recompute H, Nt.N_[0] is G.N_
+        Ft.N_ = [ sum2T(n_, rc, G) for n_ in [F_]+H if n_]  # recompute H, Nt.N_[0] is G.N_  (skip empty N_)
         setattr(G,nFt, Ft)
     # alt forks:
     for nFt,F_ in zip(('Ct','Bt'),(G.C_,G.B_)):
@@ -672,13 +673,15 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root 
 def sum2T(N_, rc, root, TT=None, c=1, fcore=1):  # simplified for Ft
 
     N = N_[0]; Nt = Copy_(N, typ=0); Nt.root = root; fTT = TT is not None
+    if N.typ ==3: Nt.N_ = []; Nt.B_ = []; Nt.L_ = []; Nt.C_ = []  # PP's N_ should be remained empty
+
     if fTT: Nt.dTT=TT; Nt.c=c
     if fcore:  # flatten H levels only
-        Nt.N_=list(N.N_); Nt.L_=list(N.L_); Nt.B_=list(N.B_); Nt.C_=list(N.C_)
+        if N.typ<3: Nt.N_=list(N.N_); Nt.L_=list(N.L_); Nt.B_=list(N.B_); Nt.C_=list(N.C_)
     else:
         Nt.N_ = N_  # all forks are nested
     for N in N_[1:]:
-        if fcore: Nt.N_+= N.N_; Nt.B_+=N.B_; Nt.C_+=N.C_; Nt.L_+=N.L_
+        if fcore and N.typ<3: Nt.N_+= N.N_; Nt.B_+=N.B_; Nt.C_+=N.C_; Nt.L_+=N.L_
         if not fTT: Nt.dTT += N.dTT; Nt.c += N.c
     if N.typ<3:  # not PP
         for nFt, nF_, F_ in zip(('Nt','Bt','Ct','Lt'),('N_','B_','C_','L_'), (Nt.N_, Nt.B_,Nt.C_,Nt.L_)):  # add tFs?
@@ -701,7 +704,7 @@ def add_N(N, n):
 
     n.fin = 1; n.root = N; fC = hasattr(n,'mo_')  # centroid
     if fC and not hasattr(N,'mo_'): N.mo_=[]
-    _cnt,cnt = N.c,n.c; C=_cnt+cnt  # weigh contribution of intensive params
+    _cnt,cnt = N.c,n.c; C=_cnt+cnt; N.c += n.c  # weigh contribution of intensive params  (using c before the accumulation)
     if fC: n.rc = np.sum([mo[1] for mo in n._mo_]); N.rC_+=n.rC_; N.mo_+=n.mo_
     else:  N.rc = (N.rc*_cnt+n.rc*cnt) / C
     N.dTT = (N.dTT*_cnt + n.dTT*cnt) / C
