@@ -134,10 +134,10 @@ def val_(TT, rc, fi=1, mw=1, rn=.5, _TT=None):  # m,d eval per cluster, rn = n /
 
 def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering, fT: convert return to tuple
 
-    N_, mL_,mTT,mc, dL_,dTT,dc = comp_C_(root.N_,rc) if fC else comp_N_(root.N_,rc)  # rc: rdn+olp
+    N_, mL_,mTT,mc, dL_,dTT,dc,pL_ = comp_C_(root.N_,rc) if fC else comp_N_(root.N_,rc)  # rc: rdn+olp
     fnG,flG = 0, 0  # add pre_mL_ to cluster pN_?
     # m fork:
-    if len(mL_)>1 and val_(mTT, rc+compw, mw=(len(mL_)-1)*Lw) > 0:
+    if len(mL_+pL_)>1 and val_(mTT, rc+compw, mw=(len(mL_+pL_)-1)*Lw) > 0:
         root.L_= mL_; Lt = sum_N_(mL_,rc, root); root_update(root,Lt)  # new ders
         root.Lt = Lt; root.Nt = sum_N_(N_,rc, root)
         for n in N_: n.em = sum([l.m for l in n.rim]) / len(n.rim)  # pre-val_
@@ -335,6 +335,15 @@ def get_exemplars(N_, rc):  # multi-layer non-maximum suppression -> sparse node
             break  # the rest of N_ is weaker, trace via rims
     return E_
 
+# draft, recursively get pL's nodes
+def get_pnode(N, pnode_):
+    
+    for pL in N.prim:
+        _N = pL[2] if pL[3] is N else pL[3]
+        if _N not in pnode_:  # not in existing pnode_ 
+            pnode_ += [_N]
+            get_pnode(_N, pnode_)  # recursive?
+
 def Cluster(root, iL_, rc, fC):  # generic clustering root
 
     def trans_cluster(root, iL_,rc):  # called from cross_comp(Fg_), others?
@@ -357,11 +366,14 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
             for i, L in enumerate(link_):
                 if val_(L.dTT,rc+compw, fi=0) < 0:  # merge
                     _N, N = L.nt
-                    if _N is not N:  # not merged
-                        sum_N_(_N.N_, rc, root=N, init=0)  # add_N(_N,N,froot=1, merge=1): merge Cs
-                        for l in N.rim: l.nt = [_N if n is N else n for n in l.nt]
-                        if N in N_: N_.remove(N)  # if multiple merging
-                        N_ += [_N]
+                    n_ = [_N]; get_pnode(N, n_)
+                    for _N in n_:  # not sure, merge all _Ns from prim now? 
+                        if _N is not N:  # not merged
+                            sum_N_(_N.N_, rc, root=N, init=0)  # add_N(_N,N,froot=1, merge=1): merge Cs
+                            for l in N.rim: 
+                                if _N in l.nt: l.nt = [_N if n is N else n for n in l.nt]  # _N from prim shouldn't be in l.nt, so skip it
+                            if N in N_: N_.remove(N)  # if multiple merging
+                            N_ += [_N]
                 else: L_ = link_[i:]; break
             root.L_ = [l for l in root.L_ if l not in L_]  # cleanup regardless of break
         else: L_ = iL_
@@ -405,18 +417,21 @@ def cluster_n(root, iC_, rc):  # simplified flood-fill, for C_ or trans_N_
             if L in in_: continue  # already clustered
             in_.add(L)
             for _N in L.nt:
-                if not _N.fin and _N in iC_:
-                    node_ += [_N]; cent_ += _N.C_; _N.fin = 1
-                    for l in _N.rim:
-                        if l in in_: continue  # cluster by link+density:
-                        if Lnt(l) > ave*rc: link_ += [l]
-                        else: b_ += [l]
+                N_ = [_N]; get_pnode(_N, N_)
+                for _N in N_:
+                    if not _N.fin and _N in iC_:
+                        node_ += [_N]; cent_ += _N.C_; _N.fin = 1
+                        for l in _N.rim:
+                            if l in in_: continue  # cluster by link+density:
+                            if Lnt(l) > ave*rc: link_ += [l]
+                            else: b_ += [l]
     G_, up, in_ = [],0, set()
     for C in iC_: C.fin = 0
     for C in iC_:  # form G per remaining C
         node_,link_,L_,B_ = [C],[],[],[]
         cent_ = C.C_
-        _L_= [l for l in C.rim if Lnt(l) > ave*rc]  # link+nt eval
+        get_pnode(C, node_)  # if we merge prim in Cluster when fC<2, then this should be redundant
+        _L_= [l for C in node_ for l in C.rim if Lnt(l) > ave*rc]  # link+nt eval
         while _L_:
             extend_G(_L_, node_, cent_, L_, B_, in_)  # _link_: select rims to extend G:
             if L_: link_ += L_; _L_ = list(set(L_)); L_ = []
@@ -443,14 +458,16 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
             if L in in_: continue  # already clustered
             in_.add(L)
             for _N in L.nt:
-                if _N.fin: continue
-                if not _N.root or _N.root==root or not _N.L_:  # not rng-banded
-                    node_+=[_N]; cent_+=_N.rC_; _N.fin = 1
-                    for l in _N.rim:
-                        if l in in_: continue  # cluster by link+density:
-                        if l in rL_:
-                            if Lnt(l) > ave*rc: link_ += [l]
-                            else: b_ += [l]
+                N_ = [_N]; get_pnode(_N, N_)
+                for _N in N_:
+                    if _N.fin: continue
+                    if not _N.root or _N.root==root or not _N.L_:  # not rng-banded
+                        node_+=[_N]; cent_+=_N.rC_; _N.fin = 1
+                        for l in _N.rim:
+                            if l in in_: continue  # cluster by link+density:
+                            if l in rL_:
+                                if Lnt(l) > ave*rc: link_ += [l]
+                                else: b_ += [l]
                 else:  # cluster top-rng roots
                     _n = _N; _R = rroot(_n)
                     if _R and not _R.fin:
@@ -462,10 +479,11 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
     for n in rN_: n.fin = 0
     for N in rN_:  # form G per remaining rng N
         if N.fin or (root.root and not N.exe): continue  # no exemplars in Fg
-        node_,cent_,Link_,_link_,B_ = [N],[],[],[],[]
+        node_ = [N]; get_pnode(N, node_)  # direct mediated prelink's node
+        cent_,Link_,_link_,B_ = [],[],[],[]
         if rng==1 or not N.root or N.root==root:  # not rng-banded
             cent_ = [C.root for C in N.C_]
-            for l in N.rim:
+            for l in [l for N in node_ for l in N.rim]:  # use rim from prelink's node?
                 if l in rL_:  # curr rng
                     if Lnt(l) > ave*rc: _link_ += [l]
                     else: B_ += [l]  # or dval?
@@ -647,6 +665,8 @@ def sum_N_(N_,rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root 
     yx_,A = [], np.zeros(2)
     # core forks:
     for i, (nFt,F_) in enumerate(zip(('Nt','Lt'),(G.N_,G.L_))):
+        if not F_: continue  # L_ may empty? For example, when summing Fgs to frame, Fg.L_ may empty
+        if F_[0].typ == 3: continue  # we need a direct check for sum2T below
         Ft = sum2T(F_, rc, G, flat=1)
         if i: root_update(G,Ft)  # else updated in add_N
         H = []  # concat levels in core fork H: top-down Nt.N_, bottom-up Lt.N_, both formed in cross_comp
