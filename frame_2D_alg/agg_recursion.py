@@ -215,7 +215,8 @@ def comp_N_(iN_,rc,_iN_=[]):
                     elif Link.d > avd*(contw+rc): B_+=[Link]; dTT+=Link.dTT; dc+=Link.c  # no overlap to simplify
                     V = Link.m-Ave  # compute dV | comp_derT: evaluate the quality of projection?
                 else:
-                    pL = [dist,dy_dx,_N,N,V]; N.prim+=[pL]; _N.prim+=[pL]  # or reuse N.pL_?
+                    pL = CN(typ=1,  nt=[_N,N], c=min(N.c,_N.c),span=dist); pL.V = V; pL.m = V  # extra for pL (we need m for lnt, so use V as m for Lt?)
+                    N.prim+=[pL]; _N.prim+=[pL]  # or reuse N.pL_?
                     pL_ += [pL]  # pre-links to cluster pN_, or use same as as L_?
                 pVt_ += [[dist, dy_dx, _N,V]]  # for distant rim eval, include pL
             else:
@@ -629,14 +630,18 @@ def sum_Gt(N_, rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root
 
     if not init: N_+=root.N_; L_+=root.L_; B_+=root.B_; C_+=root.C_
 
-    G = sum2T(N_,rc,root, flat=1)  # flatten N.Nt.N_, add_N
-    G.Nt = Copy_(G, G, typ=0); G.rng=rng  # prune G attrs
+    lev = sum2T(N_,rc, root,flat=1, typ=0)
+    Nt = Copy_(lev, typ=0); Nt.N_ = [lev]; lev.root = Nt
+    G = Copy_(Nt, typ=2); G.N_ = N_; Nt.root = G; G.Nt = Nt
+
+    # G = sum2T(N_,rc,root, flat=1)  # flatten N.Nt.N_, add_N
+    # G.Nt = Copy_(G, G, typ=0); G.rng=rng  # prune G attrs
     # optional:
     for i, (nFt, nF_, F_) in enumerate(zip(('Lt','Ct','Bt'),('L_','C_','B_'),(L_,C_,B_))):
         if F_:
             Ft = sum2T(F_,rc,G,flat=i==0); setattr(G,nF_,F_); setattr(G,nFt,Ft); root_update(G,Ft)
             if i==0:
-                A = np.sum([l.angl[0] for l in L_])  # angle dir = mean diff sign:
+                A = np.sum([l.angl[0] for l in L_],axis=0)  # angle dir = mean diff sign:
                 G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)
     if init:  # else same
         yx_ = np.array([n.yx for n in N_]); yx = yx_.mean(axis=0); dy_,dx_ = (yx_-yx).T
@@ -655,7 +660,7 @@ def sum2T(N_, rc, root, TT=None, c=1, flat=0, typ=0):  # forms fork or G
     n_ = list(N.N_)  # alt forks stay nested
     for N in N_[1:]: add_N(G,N, fTT); n_ += N.N_
     if flat: G.N_ = n_  # flatten H level forks
-    elif n_: G.Nt.N_.insert(0,sum2T(n_,rc,G))  # add new G.Nt.N_ lev0
+    elif n_: G.Nt.N_.insert(0,sum2T(n_,rc,G,typ=0))  # add new G.Nt.N_ lev0 (typ = 0 for level)
     G.m, G.d = vt_(G.dTT)
     G.rc = rc
     return G
