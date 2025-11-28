@@ -215,7 +215,7 @@ def comp_N_(iN_,rc,_iN_=[]):
                     elif Link.d > avd*(contw+rc): B_+=[Link]; dTT+=Link.dTT; dc+=Link.c  # no overlap to simplify
                     V = Link.m-Ave; dpTT+= pTT-Link.dTT  # prediction error to eval/fit the code?
                 else:
-                    pL = CN(typ=1, nt=[_N,N], dTT=pTT, m=m, d=d, c=min(N.c,_N.c), angl=dy_dx, span=dist)
+                    pL = CN(typ=-1, nt=[_N,N], dTT=pTT, m=m, d=d, c=min(N.c,_N.c), angl=dy_dx, span=dist)
                     pL_+= [pL]; N.prim+=[pL]; _N.prim+=[pL]  # use pre-links in clustering
                 pVt_ += [[dist, dy_dx,_N, V]]  # distant rim eval per L+pL Val
             else:
@@ -229,7 +229,7 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # ext
     angl = [A, np.sign(TT[1] @ wTTf[1])]  # canonic direction
     Link = CN(typ=1, dTT=TT, nt=[_N,N], c=min(N.c,_N.c), baseT=baseT, yx=yx, box=box, span=span, angl=angl, rng=rng, rc=rc)
-    if N.typ<3 and val_(TT,rc) > 0:  # skip PPs
+    if N.typ<3 and _N.typ<3 and val_(TT,rc) > 0:  # skip PPs
         comp_sub(_N,N, rc, Link)
     Link.m, Link.d = vt_(Link.dTT)
     for n, _n in (_N,N), (N,_N):  # if rim-mediated comp: reverse dir in _N.rim: rev^_rev?
@@ -240,6 +240,8 @@ def comp_sub(_N,N, rc, root):  # unpack node trees down to numericals and compar
 
     Rc = rc
     for _F_,F_,nF_,nFt in zip((_N.N_,_N.B_,_N.C_), (N.N_,N.B_,N.C_), ('N_','B_','C_'),('Nt','Bt','Ct')):  # + tN_,tB_,tC_ from trans_cluster?
+        if nF_ == 'B_':
+            _F_ = [_F for _F in _F_ if _F.typ == 1]; F_ = [F for F in F_ if F.typ == 1]  # may empty after this (skip pL)
         if _F_ and F_:
             N_,L_,mTT,mc, B_,dTT,dc = comp_C_(_F_,Rc,F_); dF_ = L_+B_  # trans-links
             if dF_:
@@ -618,8 +620,9 @@ def sum_Gt(N_, rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root
 
     if not init: N_+=root.N_; L_+=root.L_; B_+=root.B_; C_+=root.C_
 
-    G = sum2T(N_, rc, root); G.rng=rng  # add_N
-    G.Nt = Copy_(G,G, typ=0) # Nt.N_ = N.Nt.N_, already flat, prune G attrs
+    G = sum2T(N_, rc, root, typ=2); G.rng=rng  # add_N
+    # If Nt is copied from G, G.N_ must not be the same sa G.Nt.N_, so we need to reassign G.N_ here?
+    G.Nt = Copy_(G,G, typ=0); G.N_ = N_ # Nt.N_ = N.Nt.N_, already flat, prune G attrs
     # optional:
     for i, (nFt,nF_,F_) in enumerate(zip(('Lt','Ct','Bt'),('L_','C_','B_'),(L_,C_,B_))):
         if F_:
@@ -636,16 +639,19 @@ def sum_Gt(N_, rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root
     G.m,G.d = vt_(G.dTT)
     return G
 
-def sum2T(N_, rc, root, TT=None, c=1, flat=0, typ=0):  # forms fork or G
+def sum2T(N_, rc, root, TT=None, c=1, flat=0, typ=2):  # forms fork or G  (default typ = 2?)
 
     N = N_[0]; fTT = TT is not None
     G = Copy_(N,root, init=1, typ=typ)  # fork: typ=0
     if fTT: G.dTT=TT; G.c=c
     n_ = list(N.N_)  # flatten core fork, alt forks stay nested
     for N in N_[1:]: add_N(G,N,fTT); n_ += N.N_
-    if flat: G.N_ = n_  # flatten N_, currently for Lt.N_ only?
-    elif n_ and typ:  # flat new G.Nt.N_ lev0 in G, no Nt.Nt
-        G.Nt.N_.insert(0,sum2T(n_,rc,G, typ=0))
+    if n_:  # when N_ is link node, their N_ may empty, so we actually need to sum Nt from N_?
+        if flat: G.N_ = n_  # flatten N_, currently for Lt.N_ only?
+        elif N.typ<3:  # skip PP
+            if n_ and typ:  # flat new G.Nt.N_ lev0 in G, no Nt.Nt
+                G.Nt.N_.insert(0,sum2T(n_,rc,G, typ=0))
+            else: G.N_ = [sum2T(n_,rc,G, typ=0, flat=1)]  # add lev for Nt, if N is not PP
     G.m, G.d = vt_(G.dTT)
     G.rc = rc
     return G
@@ -841,18 +847,21 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
         wTTf = np.multiply([[wM,wD,wc, wI,wG,wa, wL,wS,wA]], wTTf)  # or dw_ ~= w_/ 2?
     Edge_ = []
     for blob in tile.N_:
-        if not blob.sign and blob.G > aveB:
+        # if not blob.sign and blob.G > aveB:
+        if True:
             edge = slice_edge(blob, rV)
-            if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
+            # if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
+            if len(edge.P_)>1:
                 PPm_ = comp_slice(edge, rV, wTTf)
                 Edge = sum_Gt([PP2N(PPm) for PPm in PPm_], rc=1, root=None); fE=0
                 if edge.link_:
                     bG = sum_Gt([PP2N(PPd) for PPd in edge.link_], rc=2, root=Edge); Edge.Bt = bG
                     form_B__(Edge)  # add Edge.Bt
-                    if val_(Edge.dTT,3, mw=(len(PPm_)-1)*Lw) > 0:
+                    # if val_(Edge.dTT,3, mw=(len(PPm_)-1)*Lw) > 0:
+                    if PPm_:
                         fE = trace_edge(Edge,3)  # cluster complemented G x G.B_
-                        if fE and val_(bG.dTT,4, fi=0, mw=(len(bG.N_)-1)*Lw) > 0:
-                            trace_edge(bG,4)  # for cross_comp in frame_H?
+                        # if fE and val_(bG.dTT,4, fi=0, mw=(len(bG.N_)-1)*Lw) > 0:
+                        #     trace_edge(bG,4)  # for cross_comp in frame_H?
                 if fE: Edge_ += [Edge]
     if Edge_:
         return sum_Gt(Edge_,2,None)
@@ -897,7 +906,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
                 G_ += [sum_Gt(n_,olp,root,l_)]  # include singletons
             else:
                 for N in n_:
-                    if vt_(N.dTT)[0] > ave*rc: N.fin=0; N.root=root; G_+=[N]
+                    if vt_(N.dTT)[0] > ave*rc: N.fin=0; N.root=root; G_+=[N]  # this N is PP, do we really need to recycle them? We will get typ inconsistency across N_ npw
     root.N_ = G_
     return 1 if G_ else 0
 
