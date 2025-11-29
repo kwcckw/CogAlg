@@ -216,7 +216,7 @@ def comp_N_(iN_, rc, _iN_=[]):
                     elif Link.d > avd*(contw+rc): B_+=[Link]; dTT+=Link.dTT; dc+=Link.c  # no overlap to simplify
                     V = Link.m-Ave; dpTT+= pTT-Link.dTT  # prediction error to eval, fit the code?
                 else:
-                    pL = CN(typ=-1, nt=[_N,N], dTT=pTT, m=m, d=d, c=min(N.c,_N.c), angl=np.array([dy_dx,1]), span=dist)
+                    pL = CN(typ=-1, nt=[_N,N], dTT=pTT, m=m, d=d, c=min(N.c,_N.c), angl=np.array([dy_dx,1],dtype=object), span=dist)
                     pL_+= [pL]; N.prim+=[pL]; _N.prim+=[pL]  # use pre-links in clustering
                 pVt_ += [[dist, dy_dx,_N, V]]  # distant rim eval per L+pL Val
             else:
@@ -619,7 +619,7 @@ def sum_Gt(N_, rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root
     if not init: N_+=root.N_; L_+=root.L_; B_+=root.B_; C_+=root.C_
 
     G = sum2T(N_,rc, root,typ=2); G.rng=rng  # add_N
-    G.Nt = Copy_(G,G,typ=0)  # Nt.N_ = N.Nt.N_, already flat, prune G attrs
+    G.Nt = Copy_(G,G,typ=0); G.N_ = N_  # Nt.N_ = N.Nt.N_, already flat, prune G attrs (we missed out update of G.N_, sum2T only update Nt)
     # optional:
     for i, (nFt,nF_,F_) in enumerate(zip(('Lt','Ct','Bt'),('L_','C_','B_'),(L_,C_,B_))):
         if F_:
@@ -635,6 +635,17 @@ def sum_Gt(N_, rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root
         G.mang = np.mean([comp_A(G.angl[0], l.angl[0])[0] for l in G.L_])
     G.m,G.d = vt_(G.dTT)
     # eval refine: if G.m: compute G.pm, if G.m * G.pm: pL_'comp_N(pL.nt)
+    if G.m:  # draft
+        pL_ = [L for L in G.L_ if L.typ == -1]
+        if pL_: 
+            G.dTTp = sum([L.dTT for L in pL_])
+            G.pm, G.pd = vt_(G.dTTp)
+            if G.m * G.pm:
+                for L in pL_:
+                    _N, N = L.nt
+                    dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
+                    link = comp_N(_N,N, rc, A=dy_dx, span=dist, rng=1)
+                    G.L_[G.L_.index(L)] = link  # replace with real link
     return G
 
 def sum2T(N_, rc, root, TT=None, c=1, flat=0, typ=0):  # forms fork or G
@@ -645,8 +656,11 @@ def sum2T(N_, rc, root, TT=None, c=1, flat=0, typ=0):  # forms fork or G
     n_ = list(N.N_)  # flatten core fork, alt forks stay nested
     for N in N_[1:]: add_N(G,N,fTT); n_ += N.N_
     if flat: G.N_=n_  # flatten N_, in Lt only?
-    elif n_ and typ:  # insert flat new G.Nt.N_ lev0 in G:
-        G.Nt.N_.insert(0,sum2T(n_,rc,G, typ=0))
+    elif n_ and typ:
+        if N.typ == 3:  # n_ is CP
+            G.Nt.N_.insert(0,sum2T(N_,rc,G, typ=0, flat=1))
+        else:  # insert flat new G.Nt.N_ lev0 in G:
+            G.Nt.N_.insert(0,sum2T(n_,rc,G, typ=0))
     G.m, G.d = vt_(G.dTT)
     G.rc = rc
     return G
@@ -907,8 +921,8 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
     def base_tile(y,x):  # 1st level, higher levels get Fg s
 
         Fg = frame_blobs_root( comp_pixel( image[y:y+Ly, x:x+Lx]), rV)
-        Fg = vect_edge(Fg, rV, wTTf); Fg.L_=[]  # form, trace PP_
-        if Fg: cross_comp(Fg, rc=Fg.rc)
+        Fg = vect_edge(Fg, rV, wTTf)  # form, trace PP_
+        if Fg: Fg.L_=[]; cross_comp(Fg, rc=Fg.rc)
         return Fg
 
     def expand_lev(_iy,_ix, elev, Fg):  # seed tile is pixels in 1st lev, or Fg in higher levs
@@ -929,7 +943,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
                     if PV__[y,x] > ave:
                         iy = _iy + (y-31)* Ly**elev  # feedback to shifted coords in full-res image | space:
                         ix = _ix + (x-31)* Lx**elev  # y0,x0 in projected bottom tile:
-                        if elev:
+                        if elev:  # if no elev, Fg is empty even if Fg_ is not empty?
                             subF = frame_H(image, iy,ix, Ly,Lx, Y,X, rV, elev, wTTf)  # up to current level
                             Fg = subF.H[-1] if subF else []
                     else: break
@@ -947,7 +961,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
         Fg_ = expand_lev(iY,iX, elev, Fg)
         if Fg_:  # higher-scope sparse tile
             frame = sum_Gt(Fg_,1,frame,init=0)
-            if cross_comp(Fg, rc=elev)[0]:  #| val_? spec->tN_,tC_,tL_
+            if Fg and cross_comp(Fg, rc=elev)[0]:  #| val_? spec->tN_,tC_,tL_
                 frame.N_ += [Fg]; elev += 1  # forward comped tile
                 if max_elev == 4:  # seed, not from expand_lev
                     rV,wTTf = ffeedback(Fg)  # set filters
