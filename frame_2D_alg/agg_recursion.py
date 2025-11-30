@@ -133,7 +133,8 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering, fT: 
         fnG = Cluster(root, mL_, rc,fC); rc+=fnG  # fC=0: get_exemplars, cluster_C, rng connect cluster
     # d fork
     if fC<2 and dL_ and val_(dTT, rc+compw, fi=0, mw=(len(dL_)-1)*Lw) > avd:  # comp dL_| dC_, not ddC_
-        root.B_=dL_; Bt = add_T_(dL_,rc, root); root.Bt = Bt; root_update(root,Bt)  # new ders
+        # Lt for add_T_ = current depth's root.Lt?
+        root.B_=dL_; Bt = add_T_(dL_,rc, root, root.Lt); root.Bt = Bt; root_update(root,Bt)  # new ders
         flG, rc = cross_comp(Bt, rc, fC*2)  # lG: Bt.N_+ recycled B_
         if flG: form_B__(root)  # add boundary to N and N to Bg R_ s
     if val_(mTT, rc+contw, mw=(len(root.N_)-1)*Lw) > 0:  # mval only
@@ -232,7 +233,7 @@ def comp_sub(_N,N, rc, root):  # unpack node trees down to numericals and compar
         if _F_ and F_:
             N_,L_,mTT,mc, B_,dTT,dc = comp_C_(_F_,Rc,F_); dF_= L_+B_  # trans-links, callee comp_N may call deeper comp_sub
             if dF_:
-                dFt = add_T_(dF_, Rc, root, mTT+dTT, mc+dc)
+                dFt = add_T_(dF_, Rc, root, None, mTT+dTT, mc+dc)  # Lt should be none in comp?
                 setattr(root, nF_,dF_); setattr(root, nFt, dFt); root_update(root, dFt)
                 Rc += 1
     for _lev,lev in zip(_N.Nt.N_, N.Nt.N_):  # no comp Bt,Ct: external to N,_N
@@ -576,15 +577,25 @@ def slope(link_):  # get ave 2nd rate of change with distance in cluster or fram
 
 def Lnt(l): return ((l.nt[0].em + l.nt[1].em - l.m*2) * intw / 2 + l.m) / 2  # L.m is twice included in nt.em
 
+def CopyF_(F, root=None):
+
+    C = CF(dTT=deepcopy(F.dTT)); C.root = root or F.root
+    for attr in ['m','d','c','rc']: setattr(C,attr, getattr(F,attr))
+    if F.N_:
+        if isinstance(F.N_[0], CN):  # H is N_
+            C.N_ = copy(F.N_)
+        else:  # H is levels (CF)
+            C.N_ = [CopyF_(H) for H in F.N_]
+
 def Copy_(N, root=None, init=0, typ=None):
 
     if typ is None: typ = 2 if init else N.typ  # G.typ = 2
     C = CN(dTT=deepcopy(N.dTT), typ=typ); C.root = root or N.root
     for attr in ['m','d','c','rc']: setattr(C,attr, getattr(N,attr))
-    if init: C.N_ = [N]; C.nest = N.nest+1
+    if init: C.N_ = [N]
     else:
-        if C.typ == N.typ: C.N_= N.N_; C.nest=N.nest; C.Nt = Copy_(N.Nt,root=C) if N.Nt else N.Nt
-        elif C.typ< N.typ: C.N_= N.Nt.N_; C.nest=N.nest-1  # G->Nt, no Nt.Nt, not init
+        if C.typ == N.typ: C.N_= N.N_; C.Nt = CopyF_(N.Nt,root=C) if N.Nt else N.Nt
+        # elif C.typ< N.typ: C.N_= N.Nt.N_; C.nest=N.nest-1  # G->Nt, no Nt.Nt, not init (this is not relevant now? We always copy from same typ?)
         C.L_=list(N.L_); C.B_=list(N.B_); C.C_=list(N.C_)  # empty in init G
     if typ:  # then if typ>1?
         C.eTT=deepcopy(N.eTT)
@@ -595,7 +606,7 @@ def Copy_(N, root=None, init=0, typ=None):
             if init == 1:  # else centroid
                 C.L_= [l for l in N.rim if l.m>ave]; N.root = C; N.em, N.ed = vt_(N.eTT)
         else:
-            C.Lt=Copy_(N.Lt); C.Bt=Copy_(N.Bt); C.Ct=Copy_(N.Ct)  # empty in init G
+            C.Lt=CopyF_(N.Lt); C.Bt=CopyF_(N.Bt); C.Ct=CopyF_(N.Ct)  # empty in init G
             C.angl = copy(N.angl); C.yx = copy(N.yx)
         if hasattr(N,'mo_'): C.mo_ = deepcopy(N.mo_)
     return C
@@ -654,7 +665,7 @@ def add_T_(T_, rc, root, Lt=None, TT=None, c=1):  # N_->fork or fork_->lev?
     for T in T_[1:]:
         if not fTT: F.dTT+=T.dTT; F.c+=T.c
         if fN:
-            lev0 = F.N_[0]; lev0.N_ += T.N_; lev0.dTT += T.N_  # this is overwritten below by Lt, need to review
+            lev0 = F.N_[0]; lev0.N_ += T.N_; lev0.dTT += T.dTT  # this is overwritten below by Lt, need to review (Yes, i think we need both, since we may sum L_ to Lt here)
         else:   # flat lev.N_=N_:
             for Lev,lev in zip(F.N_, T.N_): Lev.N_+=F.N_; Lev.dTT += lev.dTT
     F.m, F.d = vt_(F.dTT)
@@ -784,14 +795,13 @@ def proj_TT(L, cos_d, dist, rc, pTT, fdec=0):  # accumulate link pTT with iTT or
     TT = np.array([L.dTT[0] * dec, L.dTT[1] * cos_d * dec])
     cert = abs(val_(TT,rc) - ave)  # approximation
     if cert > ave: pTT+=TT; return # certainty margin = ave
-    if L.Nt and L.Nt.nest:
+    if isinstance(L, CN):  # only recursively project CN?
         for lev in L.Nt.N_:  # accum refined pTT
             proj_TT(lev, cos_d, dec, rc+1, pTT, fdec=1)
+        for TT in [L.Bt.dTT if L.Bt else None, L.Ct.dTT if L.Ct else None]:  # + trans-link tNt, tBt, tCt?
+            if TT is not None:
+                pTT += np.array([TT[0] * dec, TT[1] * cos_d * dec])
     else: pTT += TT  # L.dTT is redundant to H, neither is redundant to Bt,Ct
-
-    for TT in [L.Bt.dTT if L.Bt else None, L.Ct.dTT if L.Ct else None]:  # + trans-link tNt, tBt, tCt?
-        if TT is not None:
-            pTT += np.array([TT[0] * dec, TT[1] * cos_d * dec])
 
 def proj_N(N, dist, A, rc):  # arg rc += N.rc+contw, recursively specify N projection val, add pN if comp_pN?
 
