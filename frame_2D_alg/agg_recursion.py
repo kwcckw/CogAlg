@@ -84,7 +84,7 @@ class CF(CBase):
         f.c = kwargs.get('c', 0)
         f.rc = kwargs.get('rc', 0)
         f.N_ = kwargs.get('N_',[])  # H in Ft, N_ in lev
-        f.dTT  = kwargs.get('dTT',[])
+        f.dTT  = kwargs.get('dTT',np.zeros((2,9)))
         f.root = kwargs.get('root',None)
     def __bool__(f): return bool(f.c)
 
@@ -126,7 +126,7 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering, rc=r
     N_, mL_,mTT,mc, dL_,dTT,dc = comp_C_(root.N_,rc) if fC else comp_N_(root.N_,rc); nG_=[]
     # m fork:
     if len(mL_)>1 and val_(mTT, rc+compw, mw=(len(mL_)-1)*Lw) > 0:
-        root.L_= mL_; add_T_(mL_,rc, root, nF='Lt')  # new ders
+        root.L_= mL_; add_T_(mL_,rc, root, nF='Lt')  # new ders  (Lt.N_[0].N_ is empty unless there's added Ns to L.N_)
         for n in N_: n.em = sum([l.m for l in n.rim]) / len(n.rim)  # pre-val_
         nG_ = Cluster(root, mL_, rc,fC)  # fC=0: get_exemplars, cluster_C, rng connect cluster
         if nG_: rc+=1; root.N_=nG_; add_T_(nG_, rc, root, nF='Nt')
@@ -606,6 +606,9 @@ def sum2G(N_, rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root 
     G = add_N_(N_, rc, root); G.rng=rng  # default add_N_ -> Nt
     if L_:
         Lt = add_T_(L_,rc,G,nF='Lt')  # update Nt.H[0], init l0.N_ only:
+        # we need to add the very first level here when N_ is PPs since the line below in add_N_ is false:
+        # if n_ and N.typ: G.Nt.N_.insert(0, CF(N_=N_,root=G.Nt))  # not PP.P_, + Lt.dTT
+        if not G.Nt.N_: G.Nt.N_ += [CF()]  
         l0 = G.Nt.N_[0]; l0.dTT=Lt.dTT; l0.m=Lt.m; l0.d=Lt.d; l0.c=Lt.c
         A = np.sum([l.angl[0] for l in L_], axis=0)  # angle dir = mean d sign:
         G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)
@@ -625,7 +628,7 @@ def sum2G(N_, rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root 
         if pL_:
             if G.m * vt_(sum([L.dTT for L in pL_]))[0] > ave*specw:
                 for L in pL_:
-                    link = comp_N(*L.nt, rc, L.angl, L.span, L.rng)
+                    link = comp_N(*L.nt, rc, L.angl[0], L.span, L.rng)  # no dir here
                     G.Lt.dTT += link.dTT-L.dTT; L_+= [link]  # recompute m,d,c?
             G.L_ = L_
     return G
@@ -849,7 +852,7 @@ def form_B__(G):  # assign boundary / background per node from Bt, no root updat
                 bG.rB_ = sorted(bG.rB_, key=lambda x:(x.m/x.c), reverse=True)
                 rdn += bG.rB_.index(N)+1  # n stronger cores of rB
                 bG_ += [bG]; dTT+=bG.dTT
-        N.Bt = CN(typ=0, N_=bG_, dTT=dTT,m=sum(dTT[0]),d=sum(dTT[1]), c=sum(b.c for b in N.B_),rc=rdn, root=N)
+        N.Bt = CF(N_=bG_, dTT=dTT,m=sum(dTT[0]),d=sum(dTT[1]), c=sum(b.c for b in N.B_),rc=rdn, root=N)
     G.Bt = Bt
 
 def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init focal frame graph, no recursion:
@@ -867,7 +870,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 PPm_ = comp_slice(edge, rV, wTTf)
                 Edge = sum2G([PP2N(PPm) for PPm in PPm_], rc=1, root=None); fE=0
                 if edge.link_:
-                    bG = sum2G([PP2N(PPd) for PPd in edge.link_], rc=2, root=Edge); Edge.Bt = bG
+                    bG = sum2G([PP2N(PPd) for PPd in edge.link_], rc=2, root=Edge); Edge.Bt = bG  # convert bG to CF?
                     form_B__(Edge)  # add Edge.Bt
                     if val_(Edge.dTT,3, mw=(len(PPm_)-1)*Lw) > 0:
                         fE = trace_edge(Edge,3)  # cluster complemented G x G.B_
