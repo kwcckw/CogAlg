@@ -74,6 +74,7 @@ class CN(CBase):
         n.tNt,n.tBt,n.tCt = kwargs.get('tNt',CF()), kwargs.get('tBt',CF()), kwargs.get('tCt',CF())
         n.compared = set()
         # ftree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
+        def __bool__(n): return bool(n.c)  # this is missed out?
 
 class CF(CBase):
     name = "fork"
@@ -89,7 +90,7 @@ class CF(CBase):
         # to use as root in cross_comp:
         f.L_, f.B_, f.C_ = kwargs.get('L_',[]),kwargs.get('B_',[]),kwargs.get('C_',[])
         # assigned by add_T_ in cross_comp:
-        f.Nt, f.Bt, f.Ct = kwargs.get('Nt',CF()),kwargs.get('Bt',CF()),kwargs.get('Ct',CF())
+        f.Nt, f.Bt, f.Ct = kwargs.get('Nt',[]),kwargs.get('Bt',[]),kwargs.get('Ct',[])  # init when parse to cross_comp? Else endless recursion
     def __bool__(f): return bool(f.c)
 
 ave, avd, arn, aI, aS, aveB, aveR, Lw, intw, compw, centw, contw = .3, .2, 1.2, 100, 5, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
@@ -236,7 +237,7 @@ def comp_sub(_N,N, rc, root):  # unpack node trees down to numericals and compar
             N_,L_,mTT,mc, B_,dTT,dc = comp_C_(_F_,Rc,F_); dF_= L_+B_  # trans-links, callee comp_N may call deeper comp_sub
             if dF_:
                 dFt = add_T_(dF_, Rc, root, mTT+dTT, mc+dc)
-                setattr(root, nF_,dF_); setattr(root, nFt, dFt); root_update(root, dFt)
+                setattr(root, nF_,dF_); setattr(root, nFt, dFt); root_update(root, dFt)  # root.N_ maybe added with N_
                 Rc += 1
     for _lev,lev in zip(_N.Nt.N_, N.Nt.N_):  # no comp Bt,Ct: external to N,_N
         Rc += 1  # deeper levels are redundant
@@ -652,11 +653,11 @@ def add_T_(T_, rc, root, TT=None, c=1, nF=None):  # N_->fork or fork_->lev?
 
     T = T_[0]; fTT = TT is not None; fN = isinstance(T,CN)
     F = CF(dTT=TT if fTT else deepcopy(T.dTT), c=c if fTT else T.c, rc=rc, root=root)  # CF | CN->CF
-    if fN: F.N_ = [CF(N_=list(T.N_),dTT=T.dTT)]  # init 1st lev?
+    if fN: F.N_ = [CF(N_=list(T.N_),dTT=T.dTT,c=T.c)]  # init 1st lev?
     else:  F.N_ = T.N_
     for T in T_[1:]:
         if not fTT: F.dTT+=T.dTT; F.c+=T.c
-        if fN: l0 = F.N_[0]; l0.N_ += T.N_; l0.dTT += T.dTT
+        if fN: l0 = F.N_[0]; l0.N_ += T.N_; l0.dTT += T.dTT; l0.c += T.c  # c is missed out?
         else:  # always flat
             for Lev,lev in zip(F.N_,T.N_): Lev.N_+=lev.N_; Lev.dTT+=lev.dTT
     F.m, F.d = vt_(F.dTT)
@@ -853,7 +854,7 @@ def form_B__(G):  # assign boundary / background per node from Bt, no root updat
                 rdn += bG.rB_.index(N)+1  # n stronger cores of rB
                 bG_ += [bG]; dTT+=bG.dTT
         N.Bt = CF(N_=bG_, dTT=dTT,m=sum(dTT[0]),d=sum(dTT[1]), c=sum(b.c for b in N.B_),rc=rdn, root=N)
-    G.Bt = Bt
+
 
 def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init focal frame graph, no recursion:
 
@@ -869,7 +870,8 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
                 PPm_ = comp_slice(edge, rV, wTTf)
                 Edge = sum2G([PP2N(PPm) for PPm in PPm_], rc=1, root=None)
-                Edge.link_ = sum2G([PP2N(PPd) for PPd in edge.link_], rc=1, root=None)  # container only
+                Edge.link_ = sum2G([PP2N(PPd) for PPd in edge.link_], rc=1, root=None)  # container only (special case here? Where Edge.link_ is CN?)
+                add_T_(Edge.link_.N_, rc=2, root=Edge, nF='Bt')  # this is missed out?
                 form_B__(Edge)  # form B_ per PPm
                 if val_(Edge.dTT,3, mw=(len(PPm_)-1) *Lw) > 0:
                     trace_edge(Edge,3)  # cluster complemented G x G.B_, ?Edge.N_=G_, skip up
@@ -883,7 +885,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     L_ = []; cT_ = set()  # comp pairs
     for N in N_: N.fin = 0
     for N in N_:
-        _N_ = [B for rB in N.rB_ if rB.Bt for B in rB.B_ if B is not N]  # temporary
+        _N_ = [B for rB in N.rB_ if rB.Bt for B in rB.Bt.N_ if B is not N]  # temporary (this is getting G's rB_.Bt.N_, which is dG's B_?)
         if N.Bt: _N_ += [rB for B in N.Bt.N_ for rB in B.rB_ if rB is not N] + [rB for rB in N.rB_]  # + node-mediated
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
