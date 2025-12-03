@@ -399,7 +399,7 @@ def cluster_n(root, iC_, rc):  # simplified flood-fill, for C_ or trans_N_
                         if l in in_: continue  # cluster by link+density:
                         if Lnt(l) > ave*rc: link_ += [l]
                         else: b_ += [l]
-    G_, Nt, in_ = [],[], set()
+    G_, in_ = [], set()
     for C in iC_: C.fin = 0
     for C in iC_:  # form G per remaining C
         node_,link_,L_,B_ = [C],[],[],[]
@@ -655,16 +655,16 @@ def add_N(N, n, fTT=0, flat=0):  # flat currently not used
     if fC: n.rc = np.sum([mo[1] for mo in n._mo_]); N.rC_+=n.rC_; N.mo_+=n.mo_
     else:  N.rc = (N.rc*_cnt+n.rc*cnt) / C
     if not fTT: N.dTT = (N.dTT*_cnt + n.dTT*cnt) / C
-    if N.typ:  # not PP
+    if N.typ and n.typ:  # not PP (we should check n instead?)
         for i, (T,t,F_,f_) in enumerate(zip((N.Nt,N.Lt,N.Bt,N.Ct), (n.Nt,n.Lt,n.Bt,n.Ct), (N.N_,N.L_,N.B_,N.C_), (n.N_,n.L_,n.B_,n.C_))):
-            if f_:  # add 'tBt','tCt','tNt'?
+            if f_:  # add 'tBt','tCt','tNt'? That's only applicable to root?
                 if flat: F_ += f_  # else stays nested
                 if i: T.N_ += [t]
                 else:
-                    for Lev,lev in zip_longest(T.N_, t.N_):
+                    for Lev,lev in zip_longest(T.N_, t.N_, fillvalue=None):
                         if lev:  # norm /C?
-                            if Lev: Lev.N_+= lev.N_; Lev.dTT+=lev.dTT; Lev.c+=lev.c  # flat
-                            else:   N.Nt.N_ += [lev]
+                            if Lev is None: N.Nt.N_ += [lev]  # make sure don't append when there's empty Lev
+                            else:           Lev.N_+= lev.N_; Lev.dTT+=lev.dTT; Lev.c+=lev.c  # flat
         N.span = (N.span*_cnt + n.span*cnt) / C
         A,a = N.angl[0],n.angl[0]; A[:] = (A*_cnt+a*cnt) / C  # vect only
         if isinstance(N.yx, list): N.yx += [n.yx]  # weigh by C?
@@ -738,6 +738,9 @@ def PP2N(PP):
     A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
     PP = CN(typ=0, N_=P_,L_=L_,B_=B_, m=m,d=d,c=c, baseT=baseT, dTT=dTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
     for P in P_: P.root = PP  # empty Nt, Bt, Ct?
+    if hasattr(P, 'nt'):  # PPd
+        R_ = list({n.root for P in P_ for n in P.nt if n.root and n.root.typ==0 and n.root.root is not None})  # core Gs, exclude frame
+        PP.rB_  =sorted(R_, key=lambda x:(x.m/x.c), reverse=True)       
     return PP
 
 def ffeedback(root):  # adjust filters: all aves *= rV, ultimately differential backprop per ave?
@@ -836,7 +839,8 @@ def form_B__(G):  # assign boundary / background per node from Bt, no root updat
     def R(L):
         root = L.root
         if root:
-            if root not in Bt.N_: root = R(L.root)
+            if root not in Bt.N_ and root.typ != 0:  # for root PPd, typ = 0 
+                root = R(L.root)
         else: _N = L.nt[0] if L.nt[1] is N else L.nt[1]; root = _N.root  # direct L mediation
         return root
     for N in G.N_:
@@ -864,8 +868,8 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
                 PPm_ = comp_slice(edge, rV, wTTf)
+                Edge = sum2G([PP2N(PPm) for PPm in PPm_], rc=1, root=None)  # we need to form PPm first before forming PPd to assign PPm as rB of PPd
                 [PP2N(PPd) for PPd in edge.link_]  # dP.root=PPd -> PPm boundary:
-                Edge = sum2G([PP2N(PPm) for PPm in PPm_], rc=1, root=None)
                 form_B__(Edge)  # form B_,Bt per PPm
                 if val_(Edge.dTT,3, mw=(len(PPm_)-1) *Lw) > 0:
                     trace_edge(Edge,3)  # cluster complemented G x G.B_, ?Edge.N_=G_, skip up
