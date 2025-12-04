@@ -357,7 +357,7 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
         if val_(root.dTT, rc+contw, mw=(len(N_)-1)*Lw) > 0:
             G_ = cluster_n(root, N_,rc)  # in feature space if centroids, no B_,C_?
             if not G_: return  # no higher root.N_
-            tL_ = [tl for n in root.N_ for l in n.L_ for tl in l.N_]  # trans-links
+            tL_ = [tl for n in root.N_ for l in n.L_ for tl in l.N_]  # trans-links (this will never be true? when not root.root, root.N_ is edge and their L_ is empty? same as C.L_ is empty too)
             if sum(tL.m for tL in tL_) * ((len(tL_)-1)*Lw) > ave*(rc+contw):  # use tL.dTT?
                 trans_cluster(root, tL_, rc+1)  # sets tTs
                 mmax_ = []
@@ -607,7 +607,7 @@ def sum2G(N_, rc, root=None, L_=[],C_=[],B_=[], rng=1, init=1):  # updates root 
     G = add_N_(N_,rc,root); G.rng=rng  # default add_N_ -> Nt
     if L_:
         G.L_=L_; Lt = add_T_(L_,rc,G,'Lt')  # empty Lt.N_
-        if N_[0].typ:  # update Nt.H[0] if any, init l0.N_ only
+        if N_[0].typ and G.Nt.N_:  # update Nt.H[0] if any, init l0.N_ only (looks like we may not get first level when N is clustered from links (dfork))
             l0 = G.Nt.N_[0]; l0.dTT=Lt.dTT; l0.m=Lt.m; l0.d=Lt.d; l0.c=Lt.c
         A = np.sum([l.angl[0] for l in L_], axis=0)  # angle dir = mean d sign:
         G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)
@@ -652,7 +652,7 @@ def add_N(N, n, fTT=0, flat=0):  # flat currently not used
     n.fin = 1; n.root = N; fC = hasattr(n,'mo_')  # centroid
     if fC and not hasattr(N,'mo_'): N.mo_=[]
     _cnt,cnt = N.c,n.c; C=_cnt+cnt; N.c += n.c  # weigh contribution of intensive params
-    if fC: n.rc = np.sum([mo[1] for mo in n._mo_]); N.rN_+=n.rN_; N.mo_+=n.mo_
+    if fC: n.rc = np.sum([mo[1] for mo in n.mo_]); N.rN_+=n.rN_; N.mo_+=n.mo_  # should be n.mo_
     else:  N.rc = (N.rc*_cnt+n.rc*cnt) / C
     if not fTT: N.dTT = (N.dTT*_cnt + n.dTT*cnt) / C
     if n.typ:  # not PP
