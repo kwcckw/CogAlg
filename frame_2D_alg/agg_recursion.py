@@ -74,7 +74,7 @@ class CN(CBase):
         n.tNt,n.tBt,n.tCt = kwargs.get('tNt',CF()), kwargs.get('tBt',CF()), kwargs.get('tCt',CF())
         n.compared = set()
         # ftree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
-    def __bool__(n): return bool(n.c)
+    def __bool__(n): return bool(n.N_)
 
 class CF(CBase):
     name = "fork"
@@ -128,7 +128,7 @@ def val_(TT, rc, fi=1, mw=1, rn=.5, _TT=None):  # m,d eval per cluster, rn = n /
 
 def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering, rc=rdn+olp
 
-    N_, mL_,mTT,mc, dL_,dTT,dc = comp_C_(root.N_,rc) if fC else comp_N_(root.N_,rc); nG_,up = [],0
+    N_, mL_,mTT,mc, dL_,dTT,dc = comp_C_(root.N_,rc) if fC else comp_N_(root.N_,rc); nG_ = []
     # m fork:
     if len(mL_)>1 and val_(mTT, rc+compw, mw=(len(mL_)-1)*Lw) > 0:
         root.L_= mL_; add_T_(mL_,rc,root,'Lt')  # new ders, no Lt.N_
@@ -142,7 +142,7 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering, rc=r
         if bG_: add_T_(bG_,rc,root,'Bt'); form_B__(root.N_, bG_)  # add boundary to Ns, N to Bg.rN_
     # recursion:
     if val_(mTT, rc+contw, mw=(len(root.N_)-1)*Lw) > 0:  # mval only
-        nG_ = trace_edge(root.N_, rc); rc+=bool(nG_)  # comp Ns x N.Bt|B_.nt, with/out mfork?
+        nG_ = trace_edge(root.N_, rc, root); rc+=bool(nG_)  # comp Ns x N.Bt|B_.nt, with/out mfork?
     if nG_ and val_(root.dTT, rc+compw, mw=(len(root.N_)-1)*Lw, _TT=mTT) > 0:
         nG_,rc = cross_comp(root, rc)
         # connect agg+, fC=0
@@ -521,16 +521,16 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
             for n in root.N_: n._C_=n.Nt.N_; n._mo_=n.mo_; n.Nt.N_,n.mo_ = [],[]  # new n.Ct.N_s, combine with vo_ in Ct_?
         else:  # converged
             break
-    C_ = [C for C in C_ if val_(C.DTT, rc)]; up=0  # prune C_
+    C_ = [C for C in C_ if val_(C.DTT, rc)] # prune C_
     if C_:
         for n in [N for C in C_ for N in C.N_]:
             n.exe = (n.D if n.typ==1 else n.M) + np.sum([mo[0]-ave*mo[1] for mo in n.mo_]) - ave  # exemplar V + sum n match_dev to Cs, m * ||C rvals?
-        up = 1
+
         if val_(DTT, rc+olp,1, (len(C_)-1)*Lw, _TT=root.dTT) > 0:
             Ct = sum2G(C_,rc, root)
             cross_comp(Ct, rc, fC=1)  # distant Cs, different attr weights?
             root.C_=C_; root.Ct =Ct; root_update(root, Ct)  # not sure
-    return up
+    # up is redundant here now?
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
@@ -581,7 +581,7 @@ def CopyF_(F, root=None):
 def Copy_(N, root=None, init=0, typ=None):
 
     if typ is None: typ = 2 if init else N.typ  # G.typ = 2
-    C = CN(dTT=deepcopy(N.dTT), typ=typ); C.root = root or N.root
+    C = CN(dTT=deepcopy(N.dTT), typ=typ); C.root = N.root if N.root is None else root  # check None so that empty CN is not replaced, such as tile
     for attr in ['m','d','c','rc']: setattr(C,attr, getattr(N,attr))
     if init: C.N_ = [N]
     else:
@@ -743,9 +743,10 @@ def PP2N(PP):
     A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
     PP = CN(typ=0, N_=P_,L_=L_,B_=B_, m=m,d=d,c=c, baseT=baseT, dTT=dTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
     for P in P_: P.root = PP  # empty Nt, Bt, Ct?
-    if hasattr(P,'nt'):  # PPd, init rN_
-        R_ = list({n.root for P in P_ for n in P.nt if n.root and n.root.typ==0 and n.root.root is not None})  # core Gs, exclude frame
-        PP.rN_ = sorted(R_, key=lambda x:(x.m/x.c), reverse=True)
+    # below can be removed now since we parse B_ to form_B__, and their rN_ will be added in form_B__
+    # if hasattr(P,'nt'):  # PPd, init rN_
+    #     R_ = list({n.root for P in P_ for n in P.nt if n.root and n.root.typ==0 and n.root.root is not None})  # core Gs, exclude frame
+        # PP.rN_ = sorted(R_, key=lambda x:(x.m/x.c), reverse=True)
     return PP
 
 def ffeedback(root):  # adjust filters: all aves *= rV, ultimately differential backprop per ave?
@@ -838,7 +839,7 @@ def comp_prj_dH(_N, N, ddH, rn, link, angl, span, dec):
 def form_B__(N_,B_):  # assign boundary / background per node from Bt, no root update?
 
     for bG in B_:  # add reciprocal N roots per boundary graph, in Fg?
-        rN_ = list({n.root for L in bG.N_ for n in L.nt if n.root and n.root.root is not None})  # core Gs, exclude frame
+        rN_ = list({n.root for L in bG.N_ for n in L.nt if n.root and (n.root.typ==0 or n.root.root is not None)})  # core Gs, exclude frame (PP.root is empty before trace_edge)
         bG.rN_ = sorted(rN_, key=lambda x:(x.m/x.c), reverse=True)
     def R(L):
         root = L.root
@@ -866,7 +867,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             np.array([ave,avd, arn,aveB,aveR, Lw, adist, amed, intw, compw, centw, contw]) / rV)  # projected value change
         wTTf = np.multiply([[wM,wD,wc, wI,wG,wa, wL,wS,wA]], wTTf)  # or dw_ ~= w_/ 2?
     blob_ = tile.N_
-    G_, tile.N_ = [],[]  # fill in trace_edge:
+    tile.N_ = []  # fill in trace_edge:
     for blob in blob_:
         if not blob.sign and blob.G > aveB:
             edge = slice_edge(blob, rV)
@@ -876,12 +877,12 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 L_ = [PP2N(PPd) for PPd in edge.link_]
                 form_B__(N_, B_=[L for L in L_ if L.d > avd])  # form B_,Bt per PPm
                 if val_(np.sum([n.dTT for n in N_],0),3, mw=(len(PPm_)-1) *Lw) > 0:
-                    G_ = trace_edge(N_,3, tile)  # cluster complemented G x G.B_
-    if G_:  # from trace_edge
-        add_T_(G_,2,tile,'Nt')
+                    tile.Nt = CF(); trace_edge(N_,3, tile)  # cluster complemented G x G.B_ (init Nt)
+    if tile.N_:  # from trace_edge
+        # add_T_(G_,2,tile,'Nt')  # this is redundant? We already added new lev in trace_edge?
         return tile
 
-def trace_edge(N_, rc, root=None):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
+def trace_edge(N_, rc, root):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
 
     L_ = []; cT_ = set()  # comp pairs
     for N in N_: N.fin = 0
