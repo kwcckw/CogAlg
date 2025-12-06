@@ -143,7 +143,14 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering, rc=r
         if bG_: add_T_(bG_,rc,root,'Bt'); form_B__(root.N_, bG_)  # add boundary to Ns, N to Bg.rN_
     # recursion:
     if val_(mTT, rc+contw, mw=(len(root.N_)-1)*Lw) > 0:  # mval only
-        nG_ = trace_edge(root.N_, rc, root); rc+=bool(nG_)  # comp Ns x N.Bt|B_.nt, with/out mfork?
+        nG_, TT, LTT, C, Lc,  Lt_, L_ = trace_edge(root.N_, rc, root); rc+=bool(nG_)  # comp Ns x N.Bt|B_.nt, with/out mfork?
+        root.N_=nG_; root.dTT=TT; root.c=C
+        add_T_(L_,rc,root,'Lt',LTT,Lc)
+        lTT,lc = np.zeros((2,9)),0
+        for Lt in Lt_: lTT+=Lt.dTT; root.dTT=lTT; root.c+=Lt.c
+        root.m, root.d = vt_(root.dTT)
+        l0 = root.Nt.N_[0]; l0.dTT=lTT; l0.m,l0.d = vt_(lTT); l0.c=lc  # add vals to last top lev
+        root.Nt.N_.insert(0, CF(N_=N_,root=root))  # init new top level
     if nG_ and val_(root.dTT, rc+compw, mw=(len(root.N_)-1)*Lw, _TT=mTT) > 0:
         nG_,rc = cross_comp(root, rc)
         # connect agg+, fC=0
@@ -866,7 +873,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             np.array([ave,avd, arn,aveB,aveR, Lw, adist, amed, intw, compw, centw, contw]) / rV)  # projected value change
         wTTf = np.multiply([[wM,wD,wc, wI,wG,wa, wL,wS,wA]], wTTf)  # or dw_ ~= w_/ 2?
     blob_ = tile.N_
-    G_, tile.N_ =[],[]  # fill in trace_edge:
+    G_, TT, LTT, C, Lc,  Lt_, L_ = [], np.zeros((2,9)), np.zeros((2,9)), 0, 0, [], []  # fill after trace_edge:
     for blob in blob_:
         if not blob.sign and blob.G > aveB:
             edge = slice_edge(blob, rV)
@@ -876,8 +883,18 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 L_ = [PP2N(PPd) for PPd in edge.link_]
                 form_B__(N_, B_=[L for L in L_ if L.d > avd])  # forms B_,Bt per PPm
                 if val_(np.sum([n.dTT for n in N_],0),3, mw=(len(PPm_)-1)*Lw) > 0:
-                    trace_edge(N_,3, tile)  # flatten, cluster complemented G x G.B_ (init Nt)
-    if vt_(tile.dTT)[0] > ave:
+                    g_, tt, ltt, c, lc,  lt_, l_ = trace_edge(N_,3, tile)  # flatten, cluster complemented G x G.B_ (init Nt)              
+                    G_ += g_; TT += tt; LTT += ltt; C += c; Lc += lc; Lt_ += lt_; L_ += l_
+   
+    if vt_(TT)[0] > ave:
+        tile.N_=G_; tile.dTT=TT; tile.c=C
+        add_T_(L_,3,tile,'Lt',LTT,Lc)
+        lTT,lc = np.zeros((2,9)),0
+        for Lt in Lt_: lTT+=Lt.dTT; tile.dTT=lTT; tile.c+=Lt.c
+        tile.m, tile.d = vt_(tile.dTT)
+        # tile.Nt must be empty here? So add Lt as first level instead? But this doesn't looks right since Nt is same as Lt
+        tile.Nt = CopyF_(tile.Lt)
+        tile.Nt.N_.insert(0, add_T_(N_, rc=3, root=tile, nF='Nt', TT=None, c=1))  # init new top level
         return tile
 
 def trace_edge(N_, rc, root):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
@@ -893,7 +910,7 @@ def trace_edge(N_, rc, root):  # cluster contiguous shapes via PPs in edge blobs
             cT_.add(cT)
             dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx); Rc = rc + (N.rc+_N.rc) / 2
             Link = comp_N(_N,N, Rc, A=dy_dx, span=dist)
-            if vt_(Link.dTT) > ave*Rc: L_+=[Link]; lTT+=Link.dTT; lc+=Link.c
+            if vt_(Link.dTT)[0] > ave*Rc: L_+=[Link]; lTT+=Link.dTT; lc+=Link.c
     # totals:
     Gt_,Lt_, TT,C = [],[],np.zeros((2,9)),0
     for N in N_:  # flood-fill G per seed N
@@ -923,15 +940,7 @@ def trace_edge(N_, rc, root):  # cluster contiguous shapes via PPs in edge blobs
             else:
                 for N in n_: N.fin=0; N.root=root
 
-    if val_(TT,rc+1, mw=(len(G_)-1)*Lw if root.root else 1) > 0:  # root replace, default in vect_edge:
-        root.N_=G_; root.dTT=TT; root.c=C
-        add_T_(L_,rc,root,'Lt',lTT,lc)
-        lTT,lc = np.zeros((2,9)),0
-        for Lt in Lt_: lTT+=Lt.dTT; root.dTT=lTT; root.c+=Lt.c
-        root.m, root.d = vt_(root.dTT)
-        l0 = root.Nt.N_[0]; l0.dTT=lTT; l0.m,l0.d = vt_(lTT); l0.c=lc  # add vals to last top lev
-        root.Nt.N_.insert(0, CF(N_=N_,root=root))  # init new top level
-    return G_
+    return G_, TT, lTT, C, lc, Lt_, L_
 
 # frame expansion per level: cross_comp lower-window N_,C_, forward results to next lev, project feedback to scan new lower windows
 
