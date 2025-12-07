@@ -103,7 +103,7 @@ class CN(CBase):
         n.compared = set()
         # ftree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
     def __bool__(n): return bool(n.c)
-    
+
 class CF(CBase):
     name = "fork"
     def __init__(f, **kwargs):
