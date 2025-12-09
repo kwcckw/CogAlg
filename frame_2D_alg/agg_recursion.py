@@ -373,8 +373,9 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
         # primary centroid clustering:
         N_ = list({N for L in iL_ for N in L.nt if N.em})  # newly connected only
         E_ = get_exemplars(N_,rc)
+        fC, crc = [], 0
         if E_ and val_(np.sum([g.dTT for g in E_],axis=0), rc+centw, mw=(len(E_)-1)*Lw, _TT=root.dTT) > 0:
-            cluster_C(E_,root,rc)  # may call cluster_N internally, doesn't add rc?
+            fC, crc = cluster_C(E_,root,rc)  # may call cluster_N internally, doesn't add rc?
         # rng-banded connectivity clustering:
         L_ = sorted(iL_, key=lambda l: l.span)
         L__, Lseg = [], [iL_[0]]
@@ -382,13 +383,16 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
             if L.span -_L.span < adist: Lseg += [L]  # or short seg?
             else: L__ += [Lseg]; Lseg = [L]
         L__ += [Lseg]
-        for rng, rL_ in enumerate(L__,start=1):  # bottom-up rng-banded clustering
-            rc+= rng + contw
-            if rL_ and sum([l.m for l in rL_]) * ((len(rL_)-1)*Lw) > ave*rc:
-                G_,rc = cluster_N(root, rL_, rc, rng)
+        if len(L__) == 1 and fC:  # if rng == 1 and C_ form higher clusters, use root.C_ instead
+            return root.C_, crc          
+        else:
+            for rng, rL_ in enumerate(L__,start=1):  # bottom-up rng-banded clustering
+                rc+= rng + contw
+                if rL_ and sum([l.m for l in rL_]) * ((len(rL_)-1)*Lw) > ave*rc:
+                    G_,rc = cluster_N(root, {N for L in rL_ for N in L.nt}, rc, frng=rng>0)  # it's better to unpack rN_ here, because both rng == 0 and rng > 1 has rN_ as rL_ here
     return G_,rc
 
-def cluster_N(root, rN_, rc, rng=0):  # flood-fill node | link clusters, flat if rng=1
+def cluster_N(root, rN_, rc, frng=0):  # flood-fill node | link clusters, flat if rng=1
 
     def rroot(n): return rroot(n.root) if n.root and n.root!=root else n
 
@@ -398,26 +402,25 @@ def cluster_N(root, rN_, rc, rng=0):  # flood-fill node | link clusters, flat if
             in_.add(L)
             for _N in L.nt:
                 if _N.fin: continue
-                if rng:  # rng-banded, cluster top-rng roots
+                if frng:  # rng-banded, cluster top-rng roots
                     _n = _N; _R = rroot(_n)
                     if _R and not _R.fin:
                         if rolp(N, link_, R=1) > ave * rc:
                             node_ += [_R]; _R.fin = 1; _N.fin = 1
                             link_ += _R.L_; cent_ += _R.C_  # C_ is not rng-banded?
                 else:   # flat
-                    if _N in N_ and _N.root or _N.root==root or not _N.L_:
+                    if _N in rN_ and _N.root or _N.root==root or not _N.L_:
                         node_+=[_N]; cent_+=_N.C_; _N.fin = 1
                         for l in _N.rim:
                             if l in in_: continue  # cluster by link+density:
-                            if l in rN_: (_link_ if Lnt(l) > ave*rc else b_).append(l)  # or dval?
+                            (_link_ if Lnt(l) > ave*rc else b_).append(l)  # or dval? (if l in rN_ is not relevant here? When frng = 0, input is Ns instead of Ls)
     # root attrs:
     G_,N__,L__,Lt_,TT,lTT,C,lC, in_ = [],[],[],[],np.zeros((2,9)),np.zeros((2,9)),0,0, set()
-    rN_ = {N for L in rN_ for N in L.nt} if rng else rN_  # rN_=rL_ if rng-banded
-    for N in rN_: N.fin = 0
+    for N in rN_: N.fin = 0  # when rng banded, this reset should be done outside cluster_N for all Ns first?
     for N in rN_:  # form G per remaining rng N
         if N.fin or (root.root and not N.exe): continue  # no exemplars in Fg
         node_,cent_,Link_,_link_,B_ = [N],[],[],[],[]
-        if rng:
+        if frng:
             n = N; R = rroot(n)  # cluster top-rng roots
             if R and not R.fin: node_,_link_,cent_ = [R], R.L_[:], [C.root for C in R.C_]; R.fin = 1
         else:  # flat
@@ -493,6 +496,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         else:  # converged
             break
     C_ = [C for C in C_ if val_(C.DTT, rc)] # prune C_
+    fC = 0
     if C_:
         for n in [N for C in C_ for N in C.N_]:
             # exemplar V + sum n match_dev to Cs, m * ||C rvals?
@@ -500,8 +504,10 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         # not revised:
         if val_(DTT, rc+olp,1, (len(C_)-1)*Lw, _TT=root.dTT) > 0:
             Ct = sum2G(C_,rc, root)
-            cross_comp(Ct,rc, fC=1)  # distant Cs, different attr weights?
+            _, rc = cross_comp(Ct,rc, fC=1)  # distant Cs, different attr weights?
             root.C_=C_; root.Ct=Ct; root_update(root, Ct)
+            fC = 1
+    return fC, rc
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
@@ -842,10 +848,10 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
         if not blob.sign and blob.G > aveB:
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
-                PPm_ = comp_slice(edge, rV, wTTf)
+                PPm_, B_ = comp_slice(edge, rV, wTTf)
                 N_ = [PP2N(PPm) for PPm in PPm_]
-                L_ = [PP2N(PPd) for PPd in edge.link_]
-                form_B__(N_, B_=[L for L in L_ if L.d > avd])  # forms B_,Bt per PPm
+                [PP2N(PPd) for PPd in edge.link_]
+                form_B__(N_, B_=[L for L in B_ if L.d > avd])  # forms B_,Bt per PPm
                 if val_(np.sum([n.dTT for n in N_],0),3, mw=(len(PPm_)-1)*Lw) > 0:
                     trace_edge(N_,3, tile, tT)  # flatten, cluster B_-mediated Gs, init Nt
     if G_:

@@ -77,16 +77,16 @@ def comp_slice(edge, rV=1, ww_t=None):  # root function
     for P in edge.P_:  # add higher links
         P.verT = np.full((2,6), eps)
         P.rim = []; P.lrim = []; P.prim = []
-    edge.dP_ = []
+    edge.dP_, B_ = [], []
     comp_P_(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
     PPt, mverT, mm, md, mc = form_PP_(edge.P_, fd=0)  # all Ps are converted to PPs
     if PPt:
-        edge.node_ = PPt
+        edge.node_ = PPt; B_ += edge.dP_
         comp_dP_(edge, mm, mc)
         edge.link_, dverT, dm, dd, dc = form_PP_(edge.dP_, fd=1)  # separate PPd_ per edge
         edge.verT = mverT + dverT
         edge.m, edge.d, edge.c = mm + dm, md + dd, mc + dc
-    return PPt
+    return PPt, B_
 
 def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
 
