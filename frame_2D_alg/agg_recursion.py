@@ -347,7 +347,8 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
                 if val_(L.dTT,rc+compw, fi=0) < 0:  # merge
                     _N, N = L.nt
                     if _N is not N:  # not merged
-                        sum2G(_N.N_,rc, root=N, init=0)  # add_N(_N,N,froot=1, merge=1): merge Cs
+                        for n in N.N_: add_N(_N, n); _N.N_ += [n]  # i think we need to add each individual N.N_ to _N instead? sum2G doesn't add to existing _N
+                        # sum2G(_N.N_,rc, root=N, init=0)  # add_N(_N,N,froot=1, merge=1): merge Cs
                         for l in N.rim: l.nt = [_N if n is N else n for n in l.nt]
                         if N in N_: N_.remove(N)  # if multiple merging
                         N_ += [_N]
@@ -564,7 +565,7 @@ def Copy_(N, root=None, init=0, typ=None):
     for attr in ['m','d','c','rc']: setattr(C,attr, getattr(N,attr))
     if init: C.N_ = [N]
     else:
-        if C.typ==N.typ: C.N_= N.N_; C.Nt = CopyF_(N.Nt,root=C) if N.Nt else N.Nt
+        if C.typ==N.typ: C.N_= copy(N.N_); C.Nt = CopyF_(N.Nt,root=C) if N.Nt else N.Nt  # copy N_ list
         C.L_=list(N.L_); C.B_=list(N.B_); C.C_=list(N.C_)  # empty in init G
     if typ:  # then if typ>1?
         C.eTT=deepcopy(N.eTT)
@@ -850,7 +851,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
                 PPm_ = comp_slice(edge, rV, wTTf)
                 N_ = [PP2N(PPm) for PPm in PPm_]; [PP2N(PPd) for PPd in edge.link_]
-                form_B__(N_, B_=[L for PPm in PPm_ for L in PPm.B_])  # forms PPm.B_,Bt
+                form_B__(N_, B_=[L for PPm in N_ for L in PPm.B_])  # forms PPm.B_,Bt  (should be N_ for converted PPm)
                 if val_(np.sum([n.dTT for n in N_],0),3, mw=(len(PPm_)-1)*Lw) > 0:
                     trace_edge(N_,3, tile, tT)  # flatten, cluster B_-mediated Gs, init Nt
     if G_:
