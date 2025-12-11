@@ -100,7 +100,7 @@ class CF(CBase):
 ave = .3  # ave m / unit dist, top of filter specification hierarchy:
 avd = ave*.5; dec = ave / (ave+avd)  # vd= vm/2; match decay / unit dist?
 wM, wD, wc, wG, wL, wI, wS, wa, wA = 10, 10, 20, 20, 5, 20, 2, 1, 1  # dTT param weights = reversed relative estimated ave, *= ave|avd?
-arn, aI, aS, aveB, distw, Lw, intw = 1.2, 100, 5, 100, .5,.5,.5  # attr filters, replace all a with w *= ave|avd?
+aveB, distw, Lw, intw = 100, .5,.5,.5  # attr filters, replace all a with w *= ave|avd?
 compw, centw, contw, specw = 5, 10, 15, 10  # process filters, also *= ave|avd?
 mW = dW = 9; wTTf = np.ones((2,9))  # fb weights per dTT, adjust in agg+
 wY = wX =64; wYX = np.hypot(wY,wX)  # focus dimensions
@@ -256,7 +256,7 @@ def base_comp(_N,N):  # comp Et,extT,dTT, baseT if N is G?
     M, D, c = N.m, N.d, N.c; I, G, Dy, Dx = N.baseT; L = len(N.N_)
     rn = _c/c
     _pars = np.array([_M*rn,_D*rn,_c*rn,_I*rn,_G*rn, [_Dy,_Dx],_L*rn,_N.span], dtype=object)  # Et, baseT, extT
-    pars  = np.array([M,D,c, (I,aI),G, [Dy,Dx], L,(N.span,aS)], dtype=object)
+    pars  = np.array([M,D,c, (I,wI),G, [Dy,Dx], L,(N.span,wS)], dtype=object)
     mA,dA = comp_A(_N.angl[0]*_N.angl[1], N.angl[0]*N.angl[1])
     m_,d_ = comp(_pars,pars, mA,dA)  # M,D,n, I,G,a, L,S,A
     dm_,dd_ = comp_derT(rn*_N.dTT[1], N.dTT[1])
@@ -745,7 +745,7 @@ def proj_focus(PV__, y,x, Fg):  # radial accum of projected focus value in PV__
     m,d,n = Fg.m, Fg.d, Fg.c
     V = (m-ave*n) + (d-avd*n)
     dy,dx = Fg.angl[0]; a = dy/ max(dx,eps)  # average link_ orientation, projection
-    Fdist = np.hypot(np.array([y,x]),Fg.yx)
+    Fdist = np.hypot((*np.array([y,x])-Fg.yx))  # typo here? It should be subtract?
     decay = ave / (Fg.baseT[0]/n) * (wYX / Fdist)  # unit_decay * rel_dist?
     H, W = PV__.shape  # = win__
     n = 1  # radial distance
@@ -838,9 +838,9 @@ def form_B__(N_,B_):  # assign boundary / background per node from Bt, no root u
 def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init focal frame graph, no recursion:
 
     if np.any(wTTf):
-        global ave, avd, arn, aveB, Lw, distw, intw, compw, centw, contw, wM,wD,wc, wI,wG,wa, wL,wS,wA
-        ave, avd, arn, aveB, Lw, distw, intw, compw, centw, contw = (
-            np.array([ave,avd,arn,aveB, Lw,distw,intw,compw,centw,contw]) / rV)  # projected value change
+        global ave, avd, aveB, Lw, distw, intw, compw, centw, contw, wM,wD,wc, wI,wG,wa, wL,wS,wA
+        ave, avd, aveB, Lw, distw, intw, compw, centw, contw = (
+            np.array([ave,avd,aveB, Lw,distw,intw,compw,centw,contw]) / rV)  # projected value change
         wTTf = np.multiply([[wM,wD,wc, wI,wG,wa, wL,wS,wA]], wTTf)  # or dw_ ~= w_/ 2?
     blob_,G_ = tile.N_,[]
     tT = [G_,[],[],[],np.zeros((2,9)),np.zeros((2,9)),0,0]   # [G_,N_,L_,Lt_,TT,lTT,C,lc], fill in trace_edge

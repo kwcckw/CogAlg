@@ -32,7 +32,7 @@ len prior root_ sorted by G is root.olp, to eval for inclusion in PP or start ne
 '''
 
 eps = 1e-7
-ave, avd, aveB, ave_PPm, ave_PPd, ave_L, aI = 10, 10, 100, 50, 50, 4, 20
+ave, avd, aveB, ave_PPm, ave_PPd, ave_L = 10, 10, 100, 50, 50, 4
 wM, wD, wI, wG, wA, wL = 10, 10, 1, 1, 20, 20  # dert:
 w_t = np.ones((2,6))
 
@@ -77,16 +77,16 @@ def comp_slice(edge, rV=1, ww_t=None):  # root function
     for P in edge.P_:  # add higher links
         P.verT = np.full((2,6), eps)
         P.rim = []; P.lrim = []; P.prim = []
-    edge.dP_, B_ = [], []
+    edge.dP_ = []
     comp_P_(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
     PPt, mverT, mm, md, mc = form_PP_(edge.P_, fd=0)  # all Ps are converted to PPs
     if PPt:
-        edge.node_ = PPt; B_ += edge.dP_
+        edge.node_ = PPt
         comp_dP_(edge, mm, mc)
         edge.link_, dverT, dm, dd, dc = form_PP_(edge.dP_, fd=1)  # separate PPd_ per edge
         edge.verT = mverT + dverT
         edge.m, edge.d, edge.c = mm + dm, md + dd, mc + dc
-    return PPt, B_
+    return PPt
 
 def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
 
@@ -198,7 +198,7 @@ def comp_latT(_latT, latT, _n,n):  # 0der params, add align?
     rn = _n / n
     _pars = np.array([_M,_D,_I,_G, np.array([_Dy,_Dx]),_L], dtype=object)
     pars  = np.array([ M, D, I, G, np.array([ Dy, Dx]), L], dtype=object) * rn
-    pars[2] = [pars[2],aI]  # no avd*rn: d/=t
+    pars[2] = [pars[2],wI]  # no avd*rn: d/=t
     m_,d_ = comp(_pars,pars)
     return (np.array([m_,d_]),  # verT
             m_@ w_t[0],         # m
