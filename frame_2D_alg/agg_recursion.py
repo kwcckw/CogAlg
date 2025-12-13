@@ -53,7 +53,6 @@ class CN(CBase):
         # 1=L: typ,nt,dTT, m,d,c,rc, root,rng,yx,box,span,angl,fin,compared, N_,B_,C_,L_,Nt,Bt,Ct from comp_sub?
         # 2=G: + rim, eTT, em,ed,ec, baseT,mang,sub,exe, Lt, tNt, tBt, tCt?
         # 0=PP: if typ: comp_sub?
-        n.wTT = kwargs.get('wTT',np.zeros((2,9)))  # this should be default to parse into the val_?
         n.dTT = kwargs.get('dTT',np.zeros((2,9)))  # total forks dTT: m_,d_ [M,D,n, I,G,a, L,S,A]
         n.m,  n.d, n.c = kwargs.get('m',0), kwargs.get('d',0), kwargs.get('c',0)  # sum dTT
         n.rim = kwargs.get('rim',[])  # external links, rng-nest?
@@ -118,19 +117,20 @@ decay = ave / (ave+avd)  # match decay / unit dist?
 - Forward: extend cross-comp and clustering of top clusters across frames, re-order centroids by eigenvalues.
 - Feedback coords to bottom level or prior-level in parallel pipelines, filter updates in more coarse cycles '''
 
-def vt_(TT):  # brief val_ to get m, d
+def vt_(TT, wTT=None):  # brief val_ to get m, d
+
     m_,d_ = TT; ad_ = np.abs(d_); t_ = m_ + ad_ + eps  # ~ max comparand
-    return m_/t_ @ wTTf[0], ad_/t_ @ wTTf[1]
+    if wTT is None: wTT = wTTf
+    return m_/t_ @ wTT[0], ad_/t_ @ wTT[1]
 
-def val_(TT, rc, fi=1, mw=1.0, rn=.5, _TT=None, wTTf=None):  # m,d eval per cluster, rn = n / (n+_n), .5 for equal weight _dTT?
+def val_(TT, rc, fi=1, mw=1.0, rn=.5, _TT=None, wTT=None):  # m,d eval per cluster, rn = n / (n+_n), .5 for equal weight _dTT?
 
-    # arg wTTf = getattr(G,'wTT', wTTf): from cent_attr if any?
-    if not np.any(wTTf): wTTf = globals()["wTTf"]  # get from global if input wTTf is None
     t_ = np.abs(TT[0]) + np.abs(TT[1])  # not sure about abs m_
-    rv = TT[0] / (t_+eps) @ wTTf[0] if fi else TT[1] / (t_+eps) @ wTTf[1]  # fork / total per scalar
+    if wTT is None: wTT = wTTf  # or default wTT = getattr(G,'wTT',wTTf) / cent_attr?
+    rv = TT[0] / (t_+eps) @ wTT[0] if fi else TT[1] / (t_+eps) @ wTT[1]  # fork / total per scalar
     if _TT is not None:
         _t_ = np.abs(_TT[0]) + np.abs(_TT[1])
-        _rv = _TT[0] / (_t_+eps) @ wTTf[0] if fi else _TT[1] / (_t_+eps) @ wTTf[1]
+        _rv = _TT[0] / (_t_+eps) @ wTT[0] if fi else _TT[1] / (_t_+eps) @ wTT[1]
         rv = rv * (1-rn) + _rv * rn  # add borrowed root | boundary alt fork val?
 
     return rv * mw - (ave if fi else avd) * rc
@@ -150,9 +150,9 @@ def cross_comp(root, rc, fC=0):  # core function, mediates rng+ and der+ cross-c
         if bG_: sum2T(bG_,rc,root,'Bt')  # replace Bt
         form_B__(root.N_, root.B_)  # add boundary to Ns, N to Bg.rN_
     # recursion:
-    if val_(mTT, rc+contw, mw=(len(root.N_)-1) *Lw, wTTf=root.wTT) > 0:  # mval only
+    if val_(mTT, rc+contw, mw=(len(root.N_)-1) *Lw) > 0:  # mval only
         nG_,rc = trace_edge(root.N_,rc,root)  # comp Ns x N.Bt|B_.nt, with/out mfork?
-    if nG_ and val_(root.dTT, rc+compw, mw=(len(root.N_)-1)*Lw, _TT=mTT, wTTf=root.wTT) > 0:
+    if nG_ and val_(root.dTT, rc+compw, mw=(len(root.N_)-1)*Lw, _TT=mTT) > 0:
         nG_,rc = cross_comp(root, rc)
         # connect agg+, fC=0
     return nG_,rc  # nG_: recursion flag
@@ -343,7 +343,7 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
             if link_:
                 frc += 1  # trans-fork redundancy count, re-assign later?
                 Ft = sum_N_(link_,frc,root); cluster_N(Ft, {n for L in link_ for n in L.nt}, frc)
-                if val_(Ft.dTT, frc, mw=(len(Ft.N_)-1)*Lw, wTTf=Ft.wTT) > 0:
+                if val_(Ft.dTT, frc, mw=(len(Ft.N_)-1)*Lw) > 0:
                     cross_comp(Ft, frc, fC=fC)  # unlikely, doesn't add rc?
                 setattr(root,f_,link_); setattr(root, ft, Ft)  # trans-fork_ via trans-G links
     G_ = []
@@ -362,7 +362,7 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
                 else: L_ = link_[i:]; break
         else: L_ = iL_
         N_ += list({n for L in L_ for n in L.nt})  # include merged Cs
-        if val_(root.dTT, rc+contw, mw=(len(N_)-1)*Lw,wTTf=root.wTT) > 0:
+        if val_(root.dTT, rc+contw, mw=(len(N_)-1)*Lw) > 0:
             G_,rc = cluster_N(root, N_, rc)  # in feature space if centroids, no B_,C_?
             if G_:  # no higher root.N_
                 tL_ = [tl for n in root.N_ for l in n.L_ for tl in l.N_]  # trans-links
@@ -440,7 +440,7 @@ def cluster_N(root, rN_, rc, rng=0):  # flood-fill node | link clusters, flat if
             tt,ltt,c,lc,o = np.zeros((2,9)),np.zeros((2,9)),0,0,0
             for n in N_: tt+=n.dTT; c+=n.c; o+=n.rc  # from Ns, vs. Et from Ls?
             for l in L_: ltt+=l.dTT; lc+=l.c; o+=l.rc  # combine?
-            if val_(lTT, rc+o,_TT=root.dTT,wTTf=root.wTT) > 0:  # include singletons?
+            if val_(lTT, rc+o,_TT=root.dTT) > 0:  # include singletons?
                 G_ += [sum2G(N_,o,root, L_,C_)]
                 N__+=N_;L__+=L_; Lt_+=[n.Lt for n in N_]; TT+=tt; lTT+ltt; C+=c; lC+=lc
     if G_ and val_(TT, rc+1, mw=(len(G_)-1)*Lw) > 0:
@@ -498,14 +498,14 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
             for n in root.N_: n._C_=n.Nt.N_; n._mo_=n.mo_; n.Nt.N_,n.mo_ = [],[]  # new n.Ct.N_s, combine with vo_ in Ct_?
         else:  # converged
             break
-    C_ = [C for C in C_ if val_(C.DTT, rc,wTTf=C.wTT)] # prune C_
+    C_ = [C for C in C_ if val_(C.DTT, rc)] # prune C_
     fC = 0
     if C_:
         for n in [N for C in C_ for N in C.N_]:
             # exemplar V + sum n match_dev to Cs, m * ||C rvals?
             n.exe = (n.D if n.typ==1 else n.M) + np.sum([mo[0]-ave*mo[1] for mo in n.mo_]) - ave
         # not revised:
-        if val_(DTT, rc+olp,1, (len(C_)-1)*Lw, _TT=root.dTT, wTTf=root.wTT) > 0:
+        if val_(DTT, rc+olp,1, (len(C_)-1)*Lw, _TT=root.dTT) > 0:
             Ct = sum2G(C_,rc, root)
             _,rc = cross_comp(Ct,rc, fC=1)  # distant Cs, different attr weights?
             root.C_= C_; root.Ct=Ct; root_update(root, Ct)
@@ -572,7 +572,7 @@ def Copy_(N, root=None, init=0, typ=None):
     if typ:  # then if typ>1?
         C.eTT=deepcopy(N.eTT)
         for attr in ['em','ed','ec','rng','fin','span','mang','sub','exe']: setattr(C,attr, getattr(N,attr))
-        for attr in ['nt','baseT','box','rim','compared', 'wTT']: setattr(C,attr, copy(getattr(N,attr)))
+        for attr in ['nt','baseT','box','rim','compared']: setattr(C,attr, copy(getattr(N,attr)))
         if init:  # new G
             C.yx = [N.yx]; C.angl = np.array([copy(N.angl[0]), N.angl[1]],dtype=object)  # to get mean
             if init == 1:  # else centroid
@@ -640,7 +640,6 @@ def add_N(N, n, fTT=0, flat=0):  # flat currently not used
     if fC: n.rc = np.sum([mo[1] for mo in n.mo_]); N.rN_+=n.rN_; N.mo_+=n.mo_
     else:  N.rc = (N.rc*_cnt+n.rc*cnt) / C
     if not fTT: N.dTT = (N.dTT*_cnt + n.dTT*cnt) / C
-    N.wTT = (N.wTT*_cnt + n.wTT*cnt) / C
     if n.typ:  # not PP
         for i, (T,t,F_,f_) in enumerate(zip((N.Nt,N.Lt,N.Bt,N.Ct), (n.Nt,n.Lt,n.Bt,n.Ct), (N.N_,N.L_,N.B_,N.C_), (n.N_,n.L_,n.B_,n.C_))):
             if f_:  # add 'tBt','tCt','tNt'?
@@ -687,7 +686,6 @@ def root_update(root, T):  # value attrs only?
 
     _c,c = root.c,T.c; C = _c+c; root.c = C  # c is not weighted, min(_lev.c,lev.c) if root is link?
     root.dTT = (root.dTT*_c + T.dTT*c) /C
-    root.wTT = (root.wTT*_c + T.wTT*c) /C  # wTT should be updated the same from C_?
     root.rc = (root.rc*_c + T.rc*c) /C
     if root.root: root_update(root.root, T)   # upward recursion, batch in root?
 
@@ -842,9 +840,9 @@ def form_B__(N_,B_):  # assign boundary / background per node from Bt, no root u
 
 def vect_edge(tile, rV=1, fwTT=[]):  # PP_ cross_comp and floodfill to init focal frame graph, no recursion:
 
-    if np.any(fwTT):  # feedback, not fully updated (when we have fwTT and global wTT, combine them similary using wTTf*_c + fwTT*c) /C ?
+    if np.any(fwTT):  # feedback, not fully updated
         global ave,avd, aveB, Lw,distw,intw, compw,centw,contw,specw, wTTf  # /= projected V change:
-        (ave,avd,aveB,Lw,distw,intw,compw,centw,contw,specw),wTTf = (np.array([ave,avd,aveB,Lw,distw,intw,compw,centw,contw,specw]) / rV), wTTf/rV
+        ave,avd,aveB,Lw,distw,intw,compw,centw,contw,specw,wTTf = (np.array([ave,avd,aveB,Lw,distw,intw,compw,centw,contw,specw,wTTf]) / rV)
     blob_,G_ = tile.N_,[]
     tT = [G_,[],[],[],np.zeros((2,9)),np.zeros((2,9)),0,0]   # [G_,N_,L_,Lt_,TT,lTT,C,lc], fill in trace_edge
     for blob in blob_:
@@ -937,7 +935,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
         while True:
             if not elev:
                 Fg = base_tile(iy,ix)  # 1st level or cross_comped arg tile
-            if Fg and val_(Fg.dTT, Fg.rc+compw+elev, mw=(len(Fg.N_)-1)*Lw, wTTf=Fg.wTT) > 0:
+            if Fg and val_(Fg.dTT, Fg.rc+compw+elev, mw=(len(Fg.N_)-1)*Lw) > 0:
                 tile[y,x] = Fg; Fg_ += [Fg]; dy_dx = np.array([Fg.yx[0]-y,Fg.yx[1]-x])
                 pTT = proj_N(Fg, np.hypot(*dy_dx), dy_dx, elev)
                 if 1- abs(val_(pTT, rc=elev) > ave):  # search in marginal predictability
@@ -954,7 +952,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
                     else: break
                 else: break
             else: break
-        if Fg_ and val_(np.sum([g.dTT for g in Fg_],axis=0), np.mean([g.rc for g in Fg_])+elev, mw=(len(Fg_)-1)*Lw, wTTf=np.sum([g.wTT for g in Fg_],axis=0)) > 0:
+        if Fg_ and val_(np.sum([g.dTT for g in Fg_],axis=0), np.mean([g.rc for g in Fg_])+elev, mw=(len(Fg_)-1)*Lw) > 0:
             return Fg_
 
     global ave,avd, Lw, intw, compw, centw, contw, distw, mW, dW
@@ -970,7 +968,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
                 frame.N_ += [Fg]; elev += 1  # forward comped tile
                 if max_elev == 4:  # seed, not from expand_lev
                     rV,wTTf = ffeedback(Fg)  # set filters
-                    # Fg = cent_attr(Fg,2)  # set Fg.dTT correlation weights (when we have wTT accumulation in cross_comp, this can be skipped?)
+                    Fg = cent_attr(Fg,2)  # set Fg.dTT correlation weights
                     wTTf *= Fg.wTT; mW = np.sum(wTTf[0]); dW = np.sum(wTTf[1])
                     wTTf[0] *= 9/(mW or eps); wTTf[1] *= 9/(dW or eps)
             else: break
