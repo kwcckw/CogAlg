@@ -123,7 +123,7 @@ def vt_(TT, wTT=None):  # brief val_ to get m, d
     if wTT is None: wTT = wTTf
     return m_/t_ @ wTT[0], ad_/t_ @ wTT[1]
 
-def val_(TT, rc, wTT, fi=1, mw=1.0, rn=.5, _TT=None):  # m,d eval per cluster, rn = n / (n+_n), .5 for equal weight _dTT?
+def val_(TT, rc, wTT=None, fi=1, mw=1.0, rn=.5, _TT=None):  # m,d eval per cluster, rn = n / (n+_n), .5 for equal weight _dTT?
 
     t_ = np.abs(TT[0]) + np.abs(TT[1])  # not sure about abs m_
     if wTT is None: wTT = wTTf  # or default wTT =  / cent_TT?
@@ -135,7 +135,12 @@ def val_(TT, rc, wTT, fi=1, mw=1.0, rn=.5, _TT=None):  # m,d eval per cluster, r
 
     return rv * mw - (ave if fi else avd) * rc
 
-def TTw(G): return getattr(G,'wTT', None) or getattr(G.root,'wTT', None) or wTTf
+def TTw(G):
+    root = G.root; wTT = getattr(G,'wTT', None if root else wTTf); 
+    while wTT is None:
+        wTT = getattr(root,'wTT',  None if root.root else wTTf); root = root.root
+    return wTT
+    # return getattr(G,'wTT', None) or getattr(G.root,'wTT', None) or wTTf (syntax error, can't use or with None and wTTf)
 
 def cross_comp(root, rc, fC=0):  # core function, mediates rng+ and der+ cross-comp and clustering, rc=rdn+olp
 
@@ -147,7 +152,7 @@ def cross_comp(root, rc, fC=0):  # core function, mediates rng+ and der+ cross-c
         nG_,rc = Cluster(root, mL_, rc,fC)  # fC=0: exemplars, cluster_,root_replace
     # d fork:
     if fC<2 and dL_ and val_(dTT, rc+compw, TTw(root), fi=0, mw=(len(dL_)-1)*Lw) > avd:  # comp dL_|dC_, not ddC_
-        root.B_= dL_; sum2T(dL_,rc,root,'Bt')  # new ders
+        root.B_= dL_; sum2T(dL_,rc,root,'Bt'); cent_TT(root.Bt, rc)  # new ders (add wTT to CF's Bt)
         bG_,rc = cross_comp(root.Bt, rc, fC*2)
         if bG_: sum2T(bG_,rc,root,'Bt')  # replace Bt
         form_B__(root.N_, root.B_)  # add boundary to Ns, N to Bg.rN_
@@ -314,10 +319,11 @@ def comp_A(_A,A):
 
 def rolp(N, _N_, R=0):  # rel V of L_|N.rim overlap with _N_: inhibition|shared zone, oN_ = list(set(N.N_) & set(_N.N_)), no comp?
 
-    n_ = set(N.N_) if R else {n for l in N.rim for n in l.nt if n is not N}  # nrim
-    olp_ = n_ & _N_
+    n_ = set(N) if R else {n for l in N.rim for n in l.nt if n is not N}  # nrim
+    olp_ = n_ & set(_N_)
     if olp_:
         oTT = np.sum([i.dTT for i in olp_], axis=0)
+        # when n is rim, the relative dTT should be sum from rim's dTT?
         return sum(oTT[0]) / sum(N.dTT[0] if R else N.eTT[0])  # relative M (not rm) of overlap?
     else:
         return 0
@@ -344,7 +350,9 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
         for ft,f_,link_,fC in [('tNt','tN_',dN_,0), ('tBt','tB_',dB_,0), ('tCt','tC_',dC_,1)]:
             if link_:
                 frc += 1  # trans-fork redundancy count, re-assign later?
-                Ft = sum_N_(link_,frc,root); cluster_N(Ft, {n for L in link_ for n in L.nt}, frc)
+                Ft = sum_N_(link_,frc,root); N_ = {n for L in link_ for n in L.nt}
+                for N in N_: N.exe=1  # default exe = 1
+                cluster_N(Ft, N_, frc)
                 if val_(Ft.dTT, frc, TTw(root), mw=(len(Ft.N_)-1)*Lw) > 0:
                     cross_comp(Ft, frc, fC=fC)  # unlikely, doesn't add rc?
                 setattr(root,f_,link_); setattr(root, ft, Ft)  # trans-fork_ via trans-G links
@@ -426,7 +434,7 @@ def cluster_N(root, rN_, rc, rng=0):  # flood-fill node | link clusters, flat if
         if N.fin or (root.root and not N.exe): continue  # no exemplars in Fg
         node_,cent_,Link_,_link_,B_ = [N],[],[],[],[]
         if rng:
-            n = N; R = rroot(n)  # cluster top-rng roots
+            R = rroot(N)  # cluster top-rng roots (n = N is redundant?)
             if R and not R.fin: node_,_link_,cent_ = [R], R.L_[:], [C.root for C in R.C_]; R.fin = 1
         else:  # flat
             cent_ = N.C_
@@ -577,7 +585,7 @@ def Copy_(N, root=None, init=0, typ=None):
         if init:  # new G
             C.yx = [N.yx]; C.angl = np.array([copy(N.angl[0]), N.angl[1]],dtype=object)  # to get mean
             if init == 1:  # else centroid
-                C.L_= [l for l in N.rim if l.m>ave]; N.root = C; N.em, N.ed = vt_(N.eTT)
+                C.L_= [l for l in N.rim if l.m>ave]; N.root = C; N.em, N.ed = vt_(N.eTT);  C.fin = 0  # we need reset fin when init, else R in rng-band will always be skipped
         else:
             C.Lt=CopyF_(N.Lt); C.Bt=CopyF_(N.Bt); C.Ct=CopyF_(N.Ct)  # empty in init G
             C.angl = copy(N.angl); C.yx = copy(N.yx)
