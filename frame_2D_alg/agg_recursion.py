@@ -150,7 +150,7 @@ def cross_comp(root, rc, fC=0):  # core function, mediates rng+ and der+ cross-c
         if bG_: sum2T(bG_,rc,root,'Bt')  # replace Bt
         form_B__(root.N_, root.B_)  # add boundary to Ns, N to Bg.rN_
     # recursion:
-    if val_(mTT, rc+contw, mw=(len(root.N_)-1) *Lw, wTT=root.wTT) > 0:  # mval only
+    if val_(mTT, rc+contw, TTw(root), fi=root.N_[0].typ == 2,mw=(len(root.N_)-1) *Lw) > 0:  # mval only
         nG_,rc = trace_edge(root.N_,rc,root)  # comp Ns x N.Bt|B_.nt, with/out mfork?
     if nG_ and val_(root.dTT, rc+compw, TTw(root), mw=(len(root.N_)-1)*Lw, _TT=mTT) > 0:
         nG_,rc = cross_comp(root, rc)
@@ -203,7 +203,7 @@ def comp_N_(iN_, rc, _iN_=[]):
         for _N in _iN_ if _iN_ else iN_[i+1:]:  # optional _iN_ as spec
             if _N.sub != N.sub: continue  # or comp x composition?
             dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
-            N.pL_ += [[dist, dy_dx, _N]]
+            N.pL_ += [[dist, dy_dx, _N]]  # pL_ assignment is not directional and it maybe not checked at all when it break from the loop
         N.pL_.sort(key=lambda x: x[0])  # proximity prior
     for N in iN_:
         pVt_ = []  # [dist, dy_dx, _N, V]
@@ -293,7 +293,8 @@ def comp(_pars, pars, meA,deA):  # compute m_,d_ from inputs or derivatives
             d_ += [d]
         else:  # massive
             _a,a = abs(_p), abs(p)
-            m_ += [min(_a,a) if _p<0==p<0 else -min(_a,a)]  # + complement max(_a,a) for +ves?
+            # we need bracket here, else it's always false
+            m_ += [min(_a,a) if (_p<0)==(p<0) else -min(_a,a)]  # + complement max(_a,a) for +ves?
             d_ += [_p - p]
 
     # for general mass in 0:1, m = dir_m * mass + inv_m * (1-mass)?
@@ -315,7 +316,8 @@ def get_exemplars(N_, rc):  # multi-layer non-maximum suppression -> sparse seed
     E_ = set()
     for rdn, N in enumerate(sorted(N_, key=lambda n:n.em, reverse=True), start=1):  # strong-first
         oL_ = set(N.rim) & {l for e in E_ for l in e.rim}
-        roV = vt_(sum([l.dTT for l in oL_]))[0] / N.em  # relative rim olp V
+        if oL_:   roV = vt_(sum([l.dTT for l in oL_]))[0] / N.em  # relative rim olp V
+        else:     roV = 0  # we may not get any oL_ at all, and there's nothing to parse into vt_
         if N.em > ave * (rc+ rdn+ compw +roV):  # ave *= relV of overlap by stronger-E inhibition zones
             E_.update({n for l in N.rim for n in l.nt if n is not N and N.em > ave*rc})  # selective nrim
             N.exe = 1  # in point cloud of focal nodes
@@ -931,7 +933,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
         Fg_ = []; iy,ix =_iy,_ix; y,x = 31,31  # start at tile mean
         while True:
             if not elev: Fg = base_tile(iy,ix)  # 1st level or previously cross_comped arg tile
-            if Fg and val_(Fg.dTT, Fg.rc+compw+elev, Fg.wTT, mw=(len(Fg.N_)-1)*Lw) > 0:
+            if Fg and val_(Fg.dTT, Fg.rc+compw+elev, TTw(Fg), mw=(len(Fg.N_)-1)*Lw) > 0:
                 tile[y,x] = Fg; Fg_+=[Fg]
                 dy_dx = np.array([Fg.yx[0]-y,Fg.yx[1]-x])
                 pTT = proj_N(Fg, np.hypot(*dy_dx), dy_dx, elev)
@@ -949,7 +951,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
                     else: break
                 else: break
             else: break
-        if Fg_ and val_(np.sum([g.dTT for g in Fg_],axis=0), np.mean([g.rc for g in Fg_])+elev, mw=(len(Fg_)-1)*Lw) > 0:
+        if Fg_ and val_(np.sum([g.dTT for g in Fg_],axis=0), np.mean([g.rc for g in Fg_])+elev, wTTf, mw=(len(Fg_)-1)*Lw) > 0:
             return Fg_
 
     global ave,avd, Lw, intw, compw, centw, contw, distw, mW, dW
