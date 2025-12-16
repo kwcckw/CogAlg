@@ -83,7 +83,7 @@ class CF(CBase):
     name = "fork"
     def __init__(f, **kwargs):
         super().__init__()
-        f.nF = kwargs.get('nF','')  # 'Nt','Lt','Bt','Ct'?
+        f.nF = kwargs.get('nF','')  # 'Nt','Lt','Bt','Ct'? (this is redundant now?)
         f.m  = kwargs.get('m', 0)
         f.d  = kwargs.get('d', 0)
         f.c  = kwargs.get('c', 0)
@@ -236,7 +236,7 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optiona
     if m > ave*rc and _N.typ and N.typ:  # skip PP if called from sub_comp' comp_C_
         comp_sub(_N,N, rc,Link)  # root_update
     for n, _n in (_N,N),(N,_N):  # if rim-mediated comp: reverse dir in _N.rim: rev^_rev?
-        n.rim += [Link]; n.eTT += TT; n.ec += Link.c; n.compared.add(_n)  # or conditional n.eTT / rim later?
+        n.rim += [Link]; n.dTT += TT; n.ec += Link.c; n.compared.add(_n)  # or conditional n.eTT / rim later?
     return Link
 
 def comp_sub(_N,N, rc, root):  # unpack node trees down to numericals and compare them
@@ -569,7 +569,7 @@ def Copy_(N, root=None, init=0, typ=None):
         for attr in ['nt','baseT','box','rim','compared']: setattr(C,attr, copy(getattr(N,attr)))
         if init:  # new G
             C.yx = [N.yx]; C.angl = np.array([copy(N.angl[0]), N.angl[1]],dtype=object)  # to get mean
-            if init==1: C.L_=[l for l in N.rim if l.m>ave]; N.root=C; N.em,N.ed = vt_(N.eTT,N.rc); C.fin = 0  # else centroid
+            if init==1: C.L_=[l for l in N.rim if l.m>ave]; N.root=C; N.em,N.ed = vt_(N.dTT,N.rc); C.fin = 0  # else centroid
         else:
             C.Lt=CopyF_(N.Lt); C.Bt=CopyF_(N.Bt); C.Ct=CopyF_(N.Ct)  # empty in init G
             C.angl = copy(N.angl); C.yx = copy(N.yx)
@@ -683,6 +683,7 @@ def root_update(root, T):  # value attrs only?
     root.rc = (root.rc*_c + T.rc*c) / C
     if isinstance(root,CF):
         root.dTT = (root.dTT*_c + T.dTT*c) /C  # merge in fork
+        root.m, root.d =  vt_(root.dTT,root.rc)  # for CF, we still need to recompute m and d?
     else:  # borrow alt-fork deviations:
         root.m = (root.m*_c+T.m*c) /C; root.d = (root.d*_c+T.d*c) /C
     if root.root: root_update(root.root, T)   # upward recursion, batch in root?
@@ -910,7 +911,7 @@ def root_replace(root, rc, G_, N_,L_,Lt_, TT,lTT,c,lc):
 
     root.N_= G_; root.dTT=TT+lTT; root.c=c+lc
     root.rc= rc  # not sure
-    if hasattr(root, 'wTT'): cent_TT(root, root.rc)
+    cent_TT(root, root.rc)  # this should be default? Else their wTT won't be assigned
     sum2T(G_,rc, root,'Nt', TT, c)
     sum2T(L_,rc, root,'Lt',lTT,lc)
     lTT,lc = np.zeros((2,9)),0  # reset for top nested lev
