@@ -149,7 +149,7 @@ def cross_comp(root, rc, fC=0):  # core function, mediates rng+ and der+ cross-c
     if fC<2 and dL_ and val_(dTT, rc+compw, TTw(root), fi=0, mw=(len(dL_)-1)*Lw) > avd:  # comp dL_|dC_, not ddC_
         root.B_= dL_; sum2T(dL_,rc,root,'Bt')  # new ders
         bG_,rc = cross_comp(root.Bt, rc, fC*2)
-        if bG_: sum2T(bG_,rc,root,'Bt')  # replace Bt
+        if bG_: sum2T(bG_,rc,root,'Bt')  # replace Bt (add wTT to Bt here?)
         form_B__(root.N_, root.B_)  # add boundary to Ns, N to Bg.rN_
     # recursion:
     if val_(mTT, rc+contw, TTw(root), mw=(len(root.N_)-1)*Lw) > 0:  # mval only
@@ -335,7 +335,7 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
         for ft,f_,link_,fC in [('tNt','tN_',dN_,0), ('tBt','tB_',dB_,0), ('tCt','tC_',dC_,1)]:
             if link_:
                 frc += 1  # trans-fork redundancy count, re-assign later?
-                Ft = sum_N_(link_,frc,root); N_ = {n for L in link_ for n in L.nt}
+                Ft = sum2T(link_,frc,root,ft[1:]); N_ = {n for L in link_ for n in L.nt}  # here should be sum2T now? [1:} to skip t from tNt
                 for N in N_: N.exe=1
                 cluster_N(Ft, N_, frc)
                 if val_(Ft.dTT, frc, TTw(root), mw=(len(Ft.N_)-1)*Lw) > 0:
@@ -503,7 +503,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
             n.exe = (n.D if n.typ==1 else n.M) + np.sum([mo[0]-ave*mo[1] for mo in n.mo_]) - ave
         # not revised:
         if val_(DTT, rc+olp, TTw(root),1, (len(C_)-1)*Lw, _TT=root.dTT) > 0:
-            Ct = sum2T(C_,rc,root, nF='Ct')
+            Ct = sum2T(C_,rc,root, nF='Ct')  # add wTT to Ct here?
             _,rc = cross_comp(Ct, rc, fC=1)  # distant Cs, different attr weights?
             root.C_=C_; root.Ct=Ct; root_update(root,Ct)
             fC = 1
@@ -582,7 +582,21 @@ def Copy_(N, root=None, init=0, typ=None):
 def sum2G(N_, rc, root=None, L_=[],C_=[],B_=[], dTT=None,c=1, rng=1, init=1):  # updates root if not init
 
     if not init: N_+=root.N_; L_+=root.L_; B_+=root.B_; C_+=root.C_
-    G = sum_N_(N_,rc,root,dTT,c); G.rng=rng  # default, forms G.Nt
+
+    # we can unpack sum_N_ now?
+    for n in N_:  # batch sum root_updates per N here too?
+        n.m, n.d = vt_(n.dTT,rc)
+    N = N_[0]
+    lTT,lc = (copy(N.Lt.dTT), N.Lt.c) if N.Lt else (np.zeros((2,9)),0)
+    G = Copy_(N, root, init=1, typ=2);  G.rc = rc;  G.c= c 
+    n_ = list(N.N_)  # flatten core fork, alt forks stay nested
+    for N in N_[1:]:
+        add_N(G, N, fTT=dTT is not None); n_+= N.N_
+        if N.Lt: lTT+=N.Lt.dTT; lc+=N.Lt.c
+    G.N_ = N_
+    if n_ and N.typ:  # not PP.P_, + Lt.dTT:
+        m,d = vt_(lTT,rc); G.Nt.N_.insert(0, CF(N_=n_,dTT=lTT,m=m,d=d,c=lc,root=G.Nt))
+   
     if L_:
         G.L_=L_; Lt = sum2T(L_,rc,G,'Lt')  # no Lt.N_
         if N_[0].typ and G.Nt.N_:
@@ -595,7 +609,7 @@ def sum2G(N_, rc, root=None, L_=[],C_=[],B_=[], dTT=None,c=1, rng=1, init=1):  #
         G.yx = yx
     if N_[0].typ==2 and G.L_:  # else mang = 1
         G.mang = np.mean([comp_A(G.angl[0], l.angl[0])[0] for l in G.L_])
-    G.m,G.d = vt_(G.dTT,rc)
+
     if G.m > ave*specw:
         L_,pL_= [],[]; [L_.append(L) if L.typ==1 else pL_.append(L) for L in G.L_]
         if pL_:
@@ -607,6 +621,14 @@ def sum2G(N_, rc, root=None, L_=[],C_=[],B_=[], dTT=None,c=1, rng=1, init=1):  #
     # alt forks:
     if B_: sum2T(B_,rc,G,'Bt'); G.B_=B_
     if C_: sum2T(C_,rc,G,'Ct'); G.C_=C_
+    
+    # core forks:
+    G.m,G.d = vt_(G.Nt.dTT + G.Lt.dTT, rc)  # or summed in add_N?
+    for m,d in (vt_(F.dTT, rc) for F in (G.Bt, G.Ct)): G.m += m; G.d += d  # borrow deviations
+   
+    G.dTT = G.Nt.dTT+G.Lt.dTT
+    if dTT is not None: G.dTT += dTT
+
     return G
 
 def sum_N_(N_, rc, root, TT=None, c=1, flat=0):  # forms G of N_|L_
@@ -614,7 +636,7 @@ def sum_N_(N_, rc, root, TT=None, c=1, flat=0):  # forms G of N_|L_
     for n in N_:  # batch sum root_updates per N here too?
         n.m, n.d = vt_(n.dTT,rc)
     N = N_[0]; fTT= TT is not None
-    lTT,lc = (N.Lt.dTT, N.Lt.c) if N.Lt else (np.zeros((2,9)),0)
+    lTT,lc = (copy(N.Lt.dTT), N.Lt.c) if N.Lt else (np.zeros((2,9)),0)
     G = Copy_(N, root, init=1, typ=2)
     if fTT: G.dTT= TT; G.c= c  # Nt.dTT+Lt.dTT?
     n_ = list(N.N_)  # flatten core fork, alt forks stay nested
@@ -664,7 +686,7 @@ def sum2T(T_, rc, root, nF, TT=None, c=1):  # N_ -> fork T
 
     T = T_[0]; fV = TT is None
     F = CF(root=root); T.root=F  # no L_,B_,C_,Nt,Bt,Ct yet
-    if fV: F.dTT=T.dTT; F.c=T.c
+    if fV: F.dTT=copy(T.dTT); F.c=T.c
     else:  F.dTT=TT; F.c=c
     if nF=='Nt': F.N_ = [T.N_] + list(T.Nt.N_)  # deeper H
     for T in T_[1:]:
@@ -840,7 +862,7 @@ def form_B__(N_,B_):  # assign boundary / background per node from Bt, no root u
                 bG.rN_ = sorted(bG.rN_, key=lambda x:(x.m/x.c), reverse=True)
                 rdn += bG.rN_.index(N)+1  # n stronger cores of rB
                 bG_ += [bG]; dTT+=bG.dTT
-        N.Bt = CF(N_=bG_, dTT=dTT,m=sum(dTT[0]),d=sum(dTT[1]), c=sum(b.c for b in N.B_),rc=rdn, root=N)
+        sum2T(bG_,rdn, N,'Bt', dTT, sum(b.c for b in N.B_))  # it's better to call sum2T here since it has root_update
 
 def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init focal frame graph, no recursion:
 
@@ -862,6 +884,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
     if G_:
         root_replace(tile,1, *tT)  # updates tile.wTT
         if vt_(tile.dTT)[0] > ave:
+            # add wTT to edge here?
             return tile
 
 def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
