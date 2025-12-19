@@ -169,7 +169,7 @@ def comp_C_(C_, rc,_C_=[], fall=1):  # simplified for centroids, trans-N_s, leve
             dtt = comp_derT(_C.dTT[1], C.dTT[1]); m,d = vt_(dtt,rc); c = min(_C.c,C.c)
             dC = CN(nt=[_C,C], m=m,d=d, c=c, dTT=dtt, span=np.hypot(*_C.yx - C.yx))
             _C.rim += [dC]; C.rim += [dC]
-            if   dC.m > ave*(contw+rc) > 0: L_+=[dC]; mTT+=dC.dTT; mc+=c; N_ += [_C,C]
+            if   dC.m > ave*(contw+rc) > 0: L_+=[dC]; mTT+=dC.dTT; mc+=c; N_ += [_C,C]  # this is eval dC.m > ave*(contw+rc)  and ave*(contw+rc) >0, is this intended?
             elif dC.d > avd*(contw+rc) > 0: B_+=[dC]; dTT+=dC.dTT; dc+=c  # not in N_?
     else:
         # sort, select along eigenvector, may be muli-level, not yet implemented
@@ -210,12 +210,12 @@ def comp_N_(iN_, rc, _iN_=[]):
     for N in iN_:
         pVt_ = []  # [dist, dy_dx, _N, V]
         for dist, dy_dx, _N in N.pL_:  # rim angl not canonic
-            olp = (N.rc +_N.rc) / 2; rc+=olp
+            olp = (N.rc +_N.rc) / 2; lrc=rc+olp  # this rc should be per pL
             pTT = proj_V(_N,N, dist, pVt_)
-            m, d = vt_(pTT,rc)  # +|-match certainty
+            m, d = vt_(pTT,lrc)  # +|-match certainty
             if m > 0:
-                if abs(m) < ave:  # different ave for projected surprise value, comp in marginal predictability
-                    Link = comp_N(_N,N, rc, A=dy_dx, span=dist)
+                if abs(m) < ave:  # different ave for projected surprise value, comp in marginal predictability  
+                    Link = comp_N(_N,N, lrc, A=dy_dx, span=dist)
                     if   Link.m > ave: L_+=[Link]; mTT+=Link.dTT; mc+=Link.c; N_ += [_N,N]  # combined CN dTT and L_
                     elif Link.d > avd: B_+=[Link]; dTT+=Link.dTT; dc+=Link.c  # no overlap to simplify
                     m = Link.m; dpTT+= pTT-Link.dTT  # prediction error to fit code
@@ -462,7 +462,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         _Ct_ = [[c, c.m/c.c if c.m !=0 else eps, c.rc] for c in _C_]
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave * _o:
-                C = cent_TT( sum2G(((_C.N_,np.sum([N.dTT for N in _C.N_],axis=0),sum([N.c for N in _C.N_])),), rc, root), rc, init=1)
+                C = cent_TT( sum2G([[_C.N_,np.sum([N.dTT for N in _C.N_],axis=0),sum([N.c for N in _C.N_])]], rc, root), rc, init=1)
                 # C update lags behind N_; non-local C.rc += N.mo_ os?
                 _N_,_N__, mo_, M,D,O,comp,dTT,dm,do = [],[],[],0,0,0,0,np.zeros((2,9)),0,0  # per C
                 for n in _C._N_:  # core+ surround
@@ -717,7 +717,7 @@ def PP2N(PP):
                      np.array([dM, dD, dL, dI, dG, dA, dL, dL / 2, eps])])
     y,x,Y,X = box; dy,dx = Y+1-y, X+1-x
     A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
-    PP = CN(typ=0, N_=P_,L_=L_,B_=B_,dTT=dTT,m=m,d=d,c=c, baseT=baseT,box=box,yx=yx,angl=A,span=np.hypot(dy/2,dx/2), root=1)  # set root in trace_edge
+    PP = CN(typ=0, N_=P_,L_=L_,B_=B_,dTT=dTT,m=m,d=d,c=c, baseT=baseT,box=box,yx=yx,angl=A,span=np.hypot(dy/2,dx/2))  # set root in trace_edge
     for P in P_: P.root = PP  # empty Nt, Bt, Ct?
     return PP
 
@@ -833,7 +833,7 @@ def form_B__(N_,B_):  # assign boundary / background per node from Bt, no root u
                 rdn += bG.rN_.index(N)+1  # n stronger cores of rB
                 bG_ += [bG]; dTT+=bG.dTT
         N.Bt = CF(N_=bG_, dTT=dTT,m=sum(dTT[0]),d=sum(dTT[1]), c=sum(b.c for b in N.B_),rc=rdn, root=N)
-        root_update(N,N.Bt)
+        root_update(N,N.Bt)  # this root update causing problem because N could PP
 
 def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init focal frame graph, no recursion:
 
@@ -888,7 +888,7 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
                             _root = n.root; n_+=_root[0];tt+=_root[1];c+=_root[2]; l_+=_root[3];ltt+=_root[4];lc+=root[5]; root[6]=1; Lt_+=[root.Lt]
                             for _n in _root[0]: _n.root = Gt
                         else:
-                            n.fin=1; _N_+=[n]; n_+=[n];TT+=n.dTT;C+=n.c; l_+=[L];lTT+=L.dTT;lC+=L.c  # add single n
+                            n.fin=1; _N_+=[n]; n_+=[n];TT+=n.dTT;C+=n.c; l_+=[L];lTT+=L.dTT;lc+=L.c  # add single n  (should be lc here)
                             if n.Lt: Lt_+=[n.Lt]  # skip PPs
                         n.root = Gt
         Gt += [n_,tt,c, l_,ltt,lc, 0]; Gt_+=[Gt]; TT+=tt; C+=c; lTT+=ltt; lC+=lc
