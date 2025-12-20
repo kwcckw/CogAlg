@@ -433,11 +433,29 @@ def cluster_N(root, rN_, rc, rng=0):  # flood-fill node | link clusters, flat if
             N_,L_,C_,B_ = list(set(node_)),list(set(Link_)),list(set(cent_)),list(set(B_))
             nt,lt,bt,ct = np.zeros((2,9)),np.zeros((2,9)),np.zeros((2,9)),np.zeros((2,9))
             nc,lc,bc,cc = 0,0,0,0
-            for F_,tt,c in (N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc):
-                for F in F_: tt+=F.dTT; c+=F.c
+            for F_,tt,c in (N_,nt,'nc'),(L_,lt,'lc'),(B_,bt,'bc'),(C_,ct,'cc'):
+                for F in F_ : 
+                    tt+=F.dTT; 
+                    if   c == 'nc': nc += F.c
+                    elif c == 'lc': lc += F.c
+                    elif c == 'bc': bc += F.c
+                    elif c == 'cc': cc += F.c
+                    
+                # using local or exec won't work 
+                # local()[c] += F.c
+                # exec(f"{c} += F.c")
+                # nc,lc,bc,cc][i] += F.c
+                
+                # or just : 
+                # for F in N_: nt += F.dTT; nc += F.c
+                # for F in L_: lt += F.dTT; lc += F.c
+                # for F in B_: bt += F.dTT; bc += F.c
+                # for F in C_: ct += F.dTT; cc += F.c
+                                        
+                
             if val_(nt+lt, rc, TTw(root),_TT=root.dTT) + vt_(bt,rc)[0] + vt_(ct,rc)[0] > 0:  # include singletons?
                 G_+= [sum2G(((N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc)),rc,root)]
-                N__+=N_; L__+=L_; Lt_+=[n.Lt for n in N_]; TT+=tt; lTT+=lt; C+=c; lC+=lc
+                N__+=N_; L__+=L_; Lt_+=[n.Lt for n in N_]; TT+=tt; lTT+=lt; C+=nc; lC+=lc  # should be nc here
     if G_ and val_(TT, rc+1, TTw(root), mw=(len(G_)-1)*Lw) > 0:
         rc += 1
         root_replace(root,rc, G_,N__,L__,Lt_,TT,lTT,C,lC)
@@ -502,6 +520,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         # not revised:
         if val_(DTT, rc+olp, TTw(root),1, (len(C_)-1)*Lw, _TT=root.dTT) > 0:
             Ct = sum2T(C_,rc,root, nF='Ct')
+            Ct.tNt,Ct.tBt,Ct.tCt = CF(), CF(), CF()  # or make default in CF?
             _,rc = cross_comp(Ct, rc, fC=1)  # distant Cs, different attr weights?
             root.C_=C_; root.Ct=Ct; root_update(root,Ct)
             fC = 1
@@ -884,7 +903,7 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
                             _root = n.root; n_+=_root[0];tt+=_root[1];c+=_root[2]; l_+=_root[3];ltt+=_root[4];lc+=root[5]; root[6]=1; Lt_+=[root.Lt]
                             for _n in _root[0]: _n.root = Gt
                         else:
-                            n.fin=1; _N_+=[n]; n_+=[n];TT+=n.dTT;c+=n.c; l_+=[L];lTT+=L.dTT;lC+=L.c  # add single n
+                            n.fin=1; _N_+=[n]; n_+=[n];tt+=n.dTT;c+=n.c; l_+=[L];ltt+=L.dTT;lc+=L.c  # add single n (should be tt, ltt and lc here)
                             if n.Lt: Lt_+=[n.Lt]  # skip PPs
                         n.root = Gt
         Gt += [n_,tt,c, l_,ltt,lc, 0]; Gt_+=[Gt]; TT+=tt; C+=c; lTT+=ltt; lC+=lc
