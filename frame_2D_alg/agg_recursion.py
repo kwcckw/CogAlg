@@ -403,15 +403,17 @@ def cluster_N(root, rN_, rc, rng=0):  # flood-fill node | link clusters, flat if
                         roV = _N.em / oV  # relative rim olp V
                         if roV > ave * rc:
                             N_ += [_R]; _R.fin = 1; _N.fin = 1
-                            L_ += _R.L_; C_ += _R.C_  # C_ is not rng-banded?
+                            L_ += _R.L_; C_ += _R.C_  # C_ is not rng-banded?  
+                elif len(D_)> ave:  # temporary, suppose early termination should be here? And add eval from N_ and L_?
+                    return
                 else:   # flat
                     if (_N.root and _N in rN_) or _N.root==root or not _N.L_:  # link has no L_
                         N_+=[_N]; C_+=_N.C_; _N.fin = 1
                         for l in _N.rim:
                             if l in in_: continue  # cluster by link+density:
-                            if Lnt(l) > ave *rc: _L_ += [l]
-                            elif all(l.nt in N_): D_ += [l]  # internal disparity
-                            else:                 B_ += [l]  # boundary, if dval?
+                            if Lnt(l) > ave *rc:                 _L_ += [l]
+                            elif all([(n in N_) for n in l.nt ]): D_ += [l]  # internal disparity
+                            else:                                 B_ += [l]  # boundary, if dval?               
     # root attrs:
     G_,N__,L__,Lt_,TT,lTT,C,lC = [],[],[],[],np.zeros((2,9)),np.zeros((2,9)),0,0; in_= set()
     for N in rN_: N.fin = 0
@@ -423,15 +425,18 @@ def cluster_N(root, rN_, rc, rng=0):  # flood-fill node | link clusters, flat if
             if R and not R.fin: N_,_L_,C_ = [R], R.L_[:], [C.root for C in R.C_]; R.fin = 1
         else:  # flat
             C_ = N.C_
-            for l in N.rim: (N_ if Lnt(l) > ave*rc else B_).append(l)  # or dval?
+            # should be _L_ here instead of N_
+            for l in N.rim: (_L_ if Lnt(l) > ave*rc else (D_ if all([(n in N_) for n in l.nt ]) else B_)).append(l)  # or dval?  
         N.fin = 1; L_ = []
         while _L_:
             _L__ += _L_
             extend_Gt(_L_,N_,C_,L_,D_,B_, in_)
-            if L_: _L_ = list(set(L_)); link_ = []  # extended rim
+            if L_: _L_ = list(set(L_)); L_ = []  # extended rim
             else: break
-        if N_:  # add D_ fork to evaluate internal disparity: termination or min-cut criterion? (partial as links are proximity-restricted)
-            Ft_ = (list(set(N_)),np.zeros((2,9)),0), (list(set(_L__)),np.zeros((2,9)),0), (list(set(B_)),np.zeros((2,9)),0), (list(set(C_)),np.zeros((2,9)),0)
+        if len(D_)> ave:  # add D_ fork to evaluate internal disparity: termination or min-cut criterion? (partial as links are proximity-restricted)
+            pass  # if early stopping is in extend_Gt, should be just min-cut here
+        elif N_:
+            Ft_ = [list(set(N_)),np.zeros((2,9)),0], [list(set(_L__)),np.zeros((2,9)),0], [list(set(B_)),np.zeros((2,9)),0], [list(set(C_)),np.zeros((2,9)),0]  # tuple is not mutable, and we need to accumulate c
             for i, (F_,tt,c) in enumerate(Ft_):
                 for F in F_: tt+= F.dTT; Ft_[i][2] += F.c
             (N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc) = Ft_; tt = nt+lt  # core forks
