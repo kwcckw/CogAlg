@@ -178,7 +178,7 @@ def comp_C_(C_, rc,_C_=[], fall=1):  # simplified for centroids, trans-N_s, leve
             _C = C_[j]; C = C_[j+1]
             if _C in C.compared: continue
             dy_dx = _C.yx-C.yx; dist = np.hypot(*dy_dx)
-            Link = comp_N(_C,C, rc, A=dy_dx, span=dist, rng=1)  # or comp_derT?
+            Link = comp_N(_C,C, rc, A=dy_dx, span=dist)  # or comp_derT?
             if   Link.m > ave*(connw+rc): L_+=[Link]; mTT+=Link.dTT; mc+=Link.c; N_ += [_C,C]
             elif Link.d > avd*(connw+rc): B_+=[Link]; dTT+=Link.dTT; dc+=Link.c  # not in out_?
 
@@ -225,13 +225,13 @@ def comp_N_(iN_, rc, _iN_=[]):
                 break  # beyond induction range
     return list(set(N_)), L_,mTT,mc, B_,dTT,dc  # + dpTT for code-fitting backprop?
 
-def comp_N(_N,N, rc, A=np.zeros(2), span=None, rng=1):  # compare links, optional angl,span,dang?
+def comp_N(_N,N, rc, A=np.zeros(2), span=None):  # compare links, optional angl,span,dang?
 
     TT,_ = base_comp(_N, N)
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # ext
     angl = [A, np.sign(TT[1] @ wTTf[1])]  # canonic direction
     m, d = vt_(TT,rc)
-    Link = CN(typ=1,nt=[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c), yx=yx,box=box,span=span,angl=angl,rng=rng, rc=rc, baseT=(_N.baseT+N.baseT)/2)
+    Link = CN(typ=1,nt=[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c), yx=yx,box=box,span=span,angl=angl, rc=rc, baseT=(_N.baseT+N.baseT)/2)
     if m > ave*rc and _N.typ and N.typ:  # skip PP if called from sub_comp' comp_C_
         comp_sub(_N,N, rc,Link)  # root_update
     for n, _n in (_N,N),(N,_N):  # if rim-mediated comp: reverse dir in _N.rim: rev^_rev?
@@ -377,7 +377,7 @@ def Cluster(root, iL_, rc, fconn=1):  # generic clustering root
         G_,rc = cluster_N(root, list({N for L in iL_ for N in L.nt}), rc+connw)
     return G_,rc
 
-def cluster_N(root, iN_, rc):  # flood-fill node | link clusters, flat if rng=1
+def cluster_N(root, iN_, rc):  # flood-fill node | link clusters, flat
 
     def rroot(n): return rroot(n.root) if n.root and n.root!=root else n
     def nt_vt(n,_n):
@@ -411,7 +411,7 @@ def cluster_N(root, iN_, rc):  # flood-fill node | link clusters, flat if rng=1
         N.fin = 1; L_ = []
         while _L_:  # frontier links
             _L__ += _L_
-            extend_Gt(_L_,N_,C_,L_,B_, in_)
+            extend_Gt(_L_,N_,C_,L_,B_, in_)  # this is bugged
             if L_: _L_ = list(set(L_)); L_ = []  # extended rim
             else: break
         if N_:
@@ -547,7 +547,7 @@ def Copy_(N, root=None, init=0, typ=None):
         if C.typ==N.typ: C.N_=list(N.N_); C.Nt = CopyF(N.Nt,root=C) if N.Nt else N.Nt
         C.L_=list(N.L_); C.B_=list(N.B_); C.C_=list(N.C_)  # empty in init G
     if typ:
-        for attr in ['rng','fin','span','mang','sub','exe']: setattr(C,attr, getattr(N,attr))
+        for attr in ['fin','span','mang','sub','exe']: setattr(C,attr, getattr(N,attr))  # when rng is removed in CN, do we need to add something like depth to indicate sub+ depth?
         for attr in ['nt','baseT','box','rim','compared']: setattr(C,attr, copy(getattr(N,attr)))
         if init:  # new G
             C.yx = [N.yx]; C.angl = np.array([copy(N.angl[0]), N.angl[1]],dtype=object)  # to get mean
@@ -560,7 +560,7 @@ def Copy_(N, root=None, init=0, typ=None):
             if hasattr(N,'mo_'): C.mo_ = deepcopy(N.mo_)
     return C
 
-def sum2G(Ft_, rc, root=None, rng=1, init=1, fsub=1):  # updates root if not init
+def sum2G(Ft_, rc, root=None, init=1, fsub=1):  # updates root if not init
 
     N_,ntt,nc = Ft_[0]; L_,ltt,lc = [],np.zeros((2,9)),0; B_,C_ = [],[]  # init tt,c s if B_
     if len(Ft_)>1: L_,ltt,lc = Ft_[1]  # in trace_edge
@@ -573,7 +573,7 @@ def sum2G(Ft_, rc, root=None, rng=1, init=1, fsub=1):  # updates root if not ini
     for n in N_: n.m, n.d = vt_(n.dTT,rc)
     N = N_[0]
     G = Copy_(N,root, init=1,typ=2)
-    G.N_ = N_; G.dTT=ntt+ltt; G.c=nc+lc; G.rc=rc; G.rng=rng
+    G.N_ = N_; G.dTT=ntt+ltt; G.c=nc+lc; G.rc=rc
     nt = N.Nt; l0 = CF(N_=list(N.N_), dTT=deepcopy(nt.dTT), m=nt.m,d=nt.d,c=nt.c,root=G.Nt)
     G.Nt.N_ = [l0]+ [CopyF(lev,G.Nt) for lev in nt.N_]; G.Nt.dTT=deepcopy(N.dTT); G.Nt.m=N.m; G.Nt.d=N.d; G.Nt.c=N.c; G.Nt.root=G
     for N in N_[1:]: add_N(G,N)
@@ -593,7 +593,7 @@ def sum2G(Ft_, rc, root=None, rng=1, init=1, fsub=1):  # updates root if not ini
         if pL_:
             if vt_(sum([L.dTT for L in pL_]),rc)[0] > ave * specw:
                 for L in pL_:
-                    link = comp_N(*L.nt, rc, L.angl[0], L.span, L.rng)
+                    link = comp_N(*L.nt, rc, L.angl[0], L.span)
                     G.Lt.dTT+= link.dTT-L.dTT; L_+=[link]
                 G.Lt.m, G.Lt.d = vt_(G.Lt.dTT, rc)
             G.L_ = L_
@@ -803,13 +803,21 @@ def form_B__(N_,B_, rc):  # assign boundary / background per node from Bt, no ro
             elif r.typ!=0: r= R(L.root)  # PPds are not clustered
         else: _N = L.nt[0] if L.nt[1] is N else L.nt[1]; r = _N.root  # direct L mediation
         return r
+    
+    # not so sure
+    for N in N_:
+        if N.sub or not N.B_: continue
+        bG_ = []
+        for L in N.B_:
+            bG = R(L)  # replace boundary L with its root in bG.rN_ if any, else L'_N
+            if bG and bG not in bG_ and N not in bG.rN_: bG.rN_+=[N]; bG_ += [bG]  # bG.rN_ is only added from here now
+    
     for N in N_:
         if N.sub or not N.B_: continue
         bG_,dTT, rdn = [],np.zeros((2,9)),0
         for L in N.B_:
             bG = R(L)  # replace boundary L with its root in bG.rN_ if any, else L'_N
             if bG and bG not in bG_:
-                if N not in bG.rN_: bG.rN_+=[N]
                 bG.rN_ = sorted(bG.rN_, key=lambda x:(x.m/x.c), reverse=True)
                 rdn += bG.rN_.index(N)+1  # n stronger cores of rB
                 bG_ += [bG]; dTT+=bG.dTT
@@ -831,7 +839,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
                 PPm_ = comp_slice(edge, rV, wTTf)
                 N_ = [PP2N(PPm) for PPm in PPm_]; [PP2N(PPd) for PPd in edge.link_]
-                form_B__(N_, B_=[L for PPm in N_ for L in PPm.B_])  # forms PPm.B_,Bt
+                form_B__(N_, B_=[L for PPm in N_ for L in PPm.B_], rc=2)  # forms PPm.B_,Bt
                 if val_(np.sum([n.dTT for n in N_],0), 3, TTw(tile), mw=(len(PPm_)-1)*Lw) > 0:
                     trace_edge(N_,3, tile, tT)  # flatten, cluster B_-mediated Gs, init Nt
     if G_:
