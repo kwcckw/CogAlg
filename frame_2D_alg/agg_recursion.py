@@ -150,6 +150,17 @@ def cross_comp(root, rc, fconn=1):  # core function, mediates rng+ and der+ cros
         bG_,rc = cross_comp(root.Bt, rc, not fconn)  # comp dL_|dC_, not ddC_?
         if bG_: sum2T(bG_,rc,root,'Bt')  # replace Bt
         form_B__(nG_,dL_, rc)  # add boundary to Gs, G to bG.rN_
+        
+    # sub+ divisive clustering
+    if fconn and nG_:
+        for G in nG_:
+            subV = max(G.Lt.m,0) * max(G.Lt.d,0)  # divisive sub-clustering if +ve Match * Variance
+            if subV * ((len(G.N_)-1)*Lw) > ave * (rc+1) * connw:
+                for n in G.N_: n.fin=0  # exe=0?
+                _N_,_rc = Cluster(G, G.L_, rc+1)  # same nodes with higher filter
+                if _N_ and subV * ((len(_N_)-1)*Lw) > ave * _rc * compw:
+                    cross_comp(G,_rc)  # forms own B_,Bt
+
     # recursion:
     if val_(mTT, rc+connw, TTw(root), mw=(len(root.N_)-1)*Lw) > 0:  # mval only
         nG_,rc = trace_edge(root.N_,rc,root)  # comp Ns x N.Bt|B_.nt, with/out mfork?
@@ -173,6 +184,7 @@ def comp_C_(C_, rc,_C_=[], fall=1):  # simplified for centroids, trans-N_s, leve
     else:
         # sort, select along eigenvector, may be muli-level, not yet implemented
         for C in C_: C.compared=set()
+        # this is already "sequencing C_ in the order of increasing C.dTT[i], where i is argmax in root.wTT"?
         C_ = sorted(C_, key=lambda C: C.dTT[0][np.argmax(wTTf[0]+wTTf[1])])  # max weight m
         for j in range( len(C_)-1):
             _C = C_[j]; C = C_[j+1]
@@ -411,6 +423,7 @@ def cluster_N(root, iN_, rc):  # flood-fill node | link clusters, flat
             for i, (F_,tt,c) in enumerate(Ft_):
                 for F in F_: tt+= F.dTT; Ft_[i][2] += F.c
             (N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc) = Ft_; tt = nt + lt  # core forks
+            # no eval of Lt here? We may get empty L_?
             if val_(tt,rc, TTw(root),_TT=root.dTT) + vt_(bt,rc)[0] + vt_(ct,rc)[0] > 0:  # include singletons?
                 G_+= [sum2G(((N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc)), rc,root)]
                 N__+=N_; L__+=L_; Lt_+=[n.Lt for n in N_]; TT+=tt; lTT+=lt; C+=nc; lC+=lc
@@ -435,7 +448,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         _Ct_ = [[c, c.m/c.c if c.m !=0 else eps, c.rc] for c in _C_]
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave * _o:
-                C = cent_TT( sum2G([[_C.N_,np.sum([N.dTT for N in _C.N_],axis=0),sum([N.c for N in _C.N_])]], rc, root, fsub=0), rc, init=1)
+                C = cent_TT( sum2G([[_C.N_,np.sum([N.dTT for N in _C.N_],axis=0),sum([N.c for N in _C.N_])]], rc, root), rc, init=1)
                 # C update lags behind N_; non-local C.rc += N.mo_ os?
                 _N_,_N__,mo_,M,D,O,comp,dTT,dm,do = [],[],[],0,0,0,0,np.zeros((2,9)),0,0  # per C
                 for n in _C._N_:  # core+ surround
@@ -551,7 +564,7 @@ def Copy_(N, root=None, init=0, typ=None):
             if hasattr(N,'mo_'): C.mo_ = deepcopy(N.mo_)
     return C
 
-def sum2G(Ft_, rc, root=None, init=1, fsub=1):  # updates root if not init
+def sum2G(Ft_, rc, root=None, init=1):  # updates root if not init
 
     N_,ntt,nc = Ft_[0]; L_,ltt,lc = [],np.zeros((2,9)),0; B_,C_ = [],[]  # init tt,c s if B_
     if len(Ft_)>1: L_,ltt,lc = Ft_[1]  # in trace_edge
@@ -595,13 +608,6 @@ def sum2G(Ft_, rc, root=None, init=1, fsub=1):  # updates root if not init
         # borrow alt-fork m,d:
     if B_: altF(G, B_,btt,bc,'Bt','B_')
     if C_: altF(G, C_,ctt,cc,'Ct','C_')
-    if fsub:
-        subV = max(G.Lt.m,0) * max(G.Lt.d,0)  # divisive sub-clustering if +ve Match * Variance
-        if subV * ((len(N_)-1)*Lw) > ave * (rc+1) * connw:
-            for n in G.N_: n.fin=0  # exe=0?
-            _N_,_rc = Cluster(G, L_, rc+1)  # same nodes with higher filter
-            if _N_ and subV * ((len(_N_)-1)*Lw) > ave * _rc * compw:
-                cross_comp(G,_rc)  # forms own B_,Bt
     return G
 
 def add_N(G, N):  # flat is currently not used
@@ -797,7 +803,7 @@ def form_B__(N_,B_, rc):  # assign boundary / background per node from Bt, no ro
     for dL in B_:  # bG.rN_ += reciprocal nGs:
         bG = R(dL)
         if bG:  # replace boundary L with its root in bG.rN_ if any, else L.nt:
-            rN_ = list({n.root for L in bG.N_ for n in L.nt if n.root and n.root.root is not None})  # core Gs, exclude frame
+            rN_ = list({n.root for L in bG.N_ for n in L.nt if n.root in N_})  # core Gs, exclude frame (n.root should be in N_ now)
             bG.rN_ = sorted(rN_, key=lambda x:(x.m/x.c), reverse=True)
     for N in N_:
         if N.sub or not N.B_: continue
@@ -808,6 +814,7 @@ def form_B__(N_,B_, rc):  # assign boundary / background per node from Bt, no ro
                 for r, rN in enumerate(bG.rN_):
                     if rN is N:
                         bG_ += [bG]; dTT+=bG.dTT; rdn += r+1  # n stronger cores of rB
+                        break  # there should be just single matching N per L
         m, d = vt_(dTT,rc)
         N.Bt = CF(N_=bG_,dTT=dTT,m=m,d=d, c=sum(b.c for b in N.B_),rc=rc+rdn, root=N)
         root_update(N, N.Bt)
@@ -873,7 +880,7 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
     for n_,tt,c,l_,ltt,lc,merged in Gt_:
         if not merged:
             if vt_(tt,rc)[0] > ave*rc:
-                G_ += [sum2G(((n_,tt,c),(l_,ltt,lc)), rc,root,fsub=0)]  # include singletons
+                G_ += [sum2G(((n_,tt,c),(l_,ltt,lc)), rc,root)]  # include singletons
             else:
                 for N in n_: N.fin=0; N.root=root
     if val_(TT, rc+1, TTw(root), mw=1 if tT else (len(G_)-1)*Lw) > 0:
@@ -889,7 +896,7 @@ def root_replace(root, rc, G_, N_,L_,Lt_, TT,lTT,c,lc):
     root.rc= rc  # not sure
     if hasattr(root, 'wTT'): cent_TT(root, root.rc)
     sum2T(G_,rc, root,'Nt', TT, c)
-    sum2T(L_,rc, root,'Lt',lTT,lc)
+    if L_: sum2T(L_,rc, root,'Lt',lTT,lc)
     lTT,lc = np.zeros((2,9)),0  # reset for top nested lev
     for Lt in Lt_: lTT+=Lt.dTT; lc+=Lt.c
     m,d = vt_(lTT,rc)
