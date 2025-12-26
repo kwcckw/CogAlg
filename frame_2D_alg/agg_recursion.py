@@ -145,9 +145,10 @@ def cross_comp(root, rc, fconn=1):  # core function, mediates rng+ and der+ cros
     # d fork:
     if fconn and dL_ and val_(dTT, rc+compw, TTw(root), fi=0, mw=(len(dL_)-1)*Lw) > avd:
         root.B_= dL_; sum2T(dL_,rc,root,'Bt')  # new ders
-        bG_,rc = cross_comp(root.Bt, rc, not fconn)  # comp dL_|dC_, not ddC_?
-        if bG_: sum2T(bG_,rc,root,'Bt')  # replace root Bt
-        form_B__(nG_,bG_, rc)  # add boundary to nGs
+        bG_,rc = cross_comp(root.Bt, rc, not fconn)  # comp dL_|dC_, not ddC_? (bG_ might be from deeper cross_comp)
+        if bG_: 
+            sum2T(bG_,rc,root,'Bt')  # replace root Bt
+            form_B__(nG_,bG_, rc)  # add boundary to nGs
     # recursion:
     if val_(mTT, rc+connw, TTw(root), mw=(len(root.N_)-1)*Lw) > 0:  # mval only
         nG_,rc = trace_edge(root.N_,rc,root)  # comp Ns x N.Bt|B_.nt, with/out mfork?
@@ -405,16 +406,16 @@ def cluster_N(root, iN_, rc):  # flood-fill node | link clusters, flat
                         B_ += [L]
             __L_ = list(set(_L_))
         if N_:
-            Ft_ = ([list(set(N_)),np.zeros((2,9)),0], [list(set(L_)),np.zeros((2,9)),0], [list(set(B_)),np.zeros((2,9)),0,0], [list(set(C_)),np.zeros((2,9)),0,0])
+            Ft_ = ([list(set(N_)),np.zeros((2,9)),0,0], [list(set(L_)),np.zeros((2,9)),0,0], [list(set(B_)),np.zeros((2,9)),0,0], [list(set(C_)),np.zeros((2,9)),0,0])
             for i, (F_,tt,c,rc) in enumerate(Ft_):
                 for j, F in enumerate(F_):
                     tt += F.dTT; Ft_[i][2] += F.c
                     if j>1: Ft_[i][3] += F.rc  # Bt,Ct only: redundant forks?
-            (N_,nt,nc),(L_,lt,lc), (B_,bt,bc,br),(C_,ct,cc,cr) = Ft_
+            (N_,nt,nc,_),(L_,lt,lc,_), (B_,bt,bc,br),(C_,ct,cc,cr) = Ft_
             tt = nt*nc + lt*lc; c= nc+lc
             if B_: tt += bt*bc*(br/len(B_)); c+=bc
             if C_: tt += ct*cc*(cr/len(C_)); c+=cc
-            if val_(tt, rc, TTw(root), mw=(len(N_)-1)*Lw, _TT=root.dTT)[0] > 0:  # no singles?
+            if val_(tt, rc, TTw(root), mw=(len(N_)-1)*Lw, _TT=root.dTT) > 0:  # no singles? (val_ returns single value)
                 G_ += [sum2G(((N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc)), rc,root)]  # +br,cr?
                 N__+=N_; L__+=L_; Lt_+=[n.Lt for n in N_]; TT+=tt; nTT+=nt; lTT+=lt; C+=c; nC+=nc; lC+=lc
                 # G.TT * G.c * G.rc?
@@ -617,7 +618,7 @@ def add_N(G, N):  # flat is currently not used
     _c,c = G.c,N.c; C=_c+c  # weigh contribution of intensive params
     if fC: G.rc = np.sum([mo[1] for mo in N.mo_]); G.rN_+=N.rN_; G.mo_+=N.mo_
     if N.typ:  # not PP
-        G.rN_ += N.rN_  # or only if N is link?
+        G.rN_ += N.rN_  # or only if N is link? (Yes, should be valid for dgraph only, but then we need to pack rN_ from link now?)
         l0 = G.Nt.N_[0]; l0.dTT+=N.dTT; l0.c+=N.c; l0.N_ += N.N_  # flatten in new lev
         for Lev,lev in zip_longest(G.Nt.N_[1:], N.Nt.N_, fillvalue=None):
             if lev:  # norm /C?
@@ -703,6 +704,11 @@ def PP2N(PP):
     A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
     PP = CN(typ=0, N_=P_,L_=L_,B_=B_,dTT=dTT,m=m,d=d,c=c, baseT=baseT,box=box,yx=yx,angl=A,span=np.hypot(dy/2,dx/2))  # set root in trace_edge
     for P in P_: P.root = PP  # empty Nt, Bt, Ct?
+    
+    if hasattr(P, 'nt'):  # PPd, assign rN_:
+        for dP in P_:
+            for P in dP.nt: 
+                PP.rN_ += [P.root]  # add PPm as rN_ of PPd
     return PP
 
 def ffeedback(root):  # adjust filters: all aves *= rV, ultimately differential backprop per ave?
