@@ -140,7 +140,7 @@ def cross_comp(root, rc, fcon=1, fder=0):  # core function, mediates rng+ and de
     iN_, mL_,mTT,mc, dL_,dTT,dc = comp_N_(root.N_,rc) if fcon else comp_C_(root.N_,rc); nG_=[]  # nodes else centroids
     if mL_:
         # m cluster fork:
-        if val_(mTT, rc+compw, TTw(root), mw=(len(mL_)-1)*Lw) > 0 or fder:  # default for links
+        if val_(mTT, rc+compw, TTw(root), mw=(len(mL_)-1)*Lw) > 0 or (mL_ and fder):  # default for links
             root.L_= mL_; sum2T(mL_,rc,root,'Lt')  # new ders, no Lt.N_
             for n in iN_: n.em = sum([l.m for l in n.rim]) / len(n.rim)  # pre-val_
             nG_,rc = Cluster(root, mL_,rc, fcon,fder)  # cluster_N|C, +1 level, sub+ in sum2G
@@ -149,12 +149,12 @@ def cross_comp(root, rc, fcon=1, fder=0):  # core function, mediates rng+ and de
         if val_(dTT, rc+compw, TTw(root), fi=0, mw=(len(dL_)-1)*Lw) > 0 and not fder:  # no dd fork
             root.B_ = dL_; sum2T(dL_,rc,root,'Bt')  # new ders
             bG_,rc = cross_comp(root.Bt, rc, fder=1)  # comp dL_|dC_
-            sum2T(bG_,rc,root,'Bt'); form_B__(nG_,bG_,rc)  # default set root Bt, nG boundary
+            if bG_: sum2T(bG_,rc,root,'Bt'); form_B__(nG_,bG_,rc)  # default set root Bt, nG boundary (bG_ could be empty)
     if nG_:
         # rc incr in Cluster, agg recursion:
         if val_(mTT, rc+connw, TTw(root), mw=(len(root.N_)-1)*Lw) > 0:  # mval only
             nG_,rc = trace_edge(root.N_,rc,root)  # comp Ns x N.Bt|B_.nt, with/out mfork?
-        if nG_ and val_(root.dTT, rc+compw, TTw(root), mw=(len(root.N_)-1)*Lw, _TT=mTT) > 0:
+        if nG_ and not fder and val_(root.dTT, rc+compw, TTw(root), mw=(len(root.N_)-1)*Lw, _TT=mTT) > 0:  # we need not fder to skip dfork?
             nG_,rc = cross_comp(root, rc)
     return nG_,rc  # nG_: recursion flag
 
@@ -353,7 +353,7 @@ def Cluster(root, iL_, rc, fcon=1, fder=0):  # generic clustering root
                 else: L_ = link_[i:]; break
         else: L_ = iL_
         N_ = list(set([n for L in L_ for n in L.nt] + N_))  # include merged Cs
-        if val_(root.dTT, rc+connw, TTw(root), mw=(len(N_)-1)*Lw) > 0 or fcon > 1:
+        if val_(root.dTT, rc+connw, TTw(root), mw=(len(N_)-1)*Lw) > 0 or (fcon > 1 and N_):
             G_,rc = cluster_N(root, N_,rc, fder)  # in feature space if centroids, no B_,C_?
             if G_:  # no higher root.N_
                 tL_ = [tl for n in root.N_ for l in n.L_ for tl in l.N_]  # trans-links
@@ -397,6 +397,7 @@ def cluster_N(root, iN_, rc, fder=0):  # flood-fill node | link clusters, flat
             _L_ = []
             for L in __L_: # flood-fill via frontier links
                 _N = L.nt[0] if L.nt[1].fin else L.nt[1]; in_.add(L)
+                # why we need _N.root == root?
                 if not _N.fin and ((_N.root and _N in iN_) or _N.root==root or not _N.L_):  # link has no L_
                     m,d = nt_vt(*L.nt)
                     if m > ave * (rc-1):  # cluster nt, L,C_ by combined rim density:
@@ -405,6 +406,7 @@ def cluster_N(root, iN_, rc, fder=0):  # flood-fill node | link clusters, flat
                         _L_+= [l for l in _N.rim if l not in in_ and (l.nt[0].fin ^ l.nt[1].fin)]   # new frontier links, +|-?
                     elif d > avd * (rc-1):  # contrast value, exclusive?
                         B_ += [L]
+                # when both N.fin and _N.fin but L not in in_, those Ls will be ignored?        
             __L_ = list(set(_L_))
         if N_:
             Ft_ = ([list(set(N_)),np.zeros((2,9)),0,0], [list(set(L_)),np.zeros((2,9)),0,0], [list(set(B_)),np.zeros((2,9)),0,0], [list(set(C_)),np.zeros((2,9)),0,0])
@@ -416,11 +418,11 @@ def cluster_N(root, iN_, rc, fder=0):  # flood-fill node | link clusters, flat
             tt = nt*nc + lt*lc; c= nc+lc
             if B_: tt += bt*bc*(br/len(B_)); c+=bc
             if C_: tt += ct*cc*(cr/len(C_)); c+=cc
-            if val_(tt, rc, TTw(root), mw=(len(N_)-1)*Lw, _TT=root.dTT) > 0 or fder:
+            if val_(tt, rc, TTw(root), mw=(len(N_)-1)*Lw, _TT=root.dTT) > 0 or (N_ and fder):
                 G_ += [sum2G(((N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc)), rc,root)]  # br,cr?
                 N__+=N_; L__+=L_; Lt_+=[n.Lt for n in N_]; TT+=tt; nTT+=nt; lTT+=lt; C+=c; nC+=nc; lC+=lc
                 # G.TT * G.c * G.rc?
-    if fder or (G_ and val_(TT, rc+1, TTw(root), mw=(len(G_)-1)*Lw)):  # include singleton lG
+    if G_ and (fder or val_(TT, rc+1, TTw(root), mw=(len(G_)-1)*Lw)):  # include singleton lG  (We still need at least single G_)
         rc += 1
         root_replace(root,rc, G_,N__,L__,Lt_,TT,nTT,lTT,C,nC,lC)
     return G_, rc
@@ -548,7 +550,7 @@ def Copy_(N, root=None, init=0, typ=None):
         for attr in ['nt','baseT','box','rim','compared']: setattr(C,attr, copy(getattr(N,attr)))
         if init:  # new G
             C.yx = [N.yx]; C.angl = np.array([copy(N.angl[0]), N.angl[1]],dtype=object)  # to get mean
-            if init==1: C.L_=[l for l in N.rim if l.m>ave]; N.root=C; N.em,N.ed = vt_(N.eTT,N.rc); C.fin = 0  # else centroid
+            if init==1: C.L_=[l for l in N.rim if l.m>ave]; N.root=C; N.em,N.ed = vt_(N.eTT,N.rc); C.fin = 0; C.rim = []  # else centroid (if init, rim should be empty?)
         else:
             C.Lt=CopyF(N.Lt); C.Bt=CopyF(N.Bt); C.Ct=CopyF(N.Ct)  # empty in init G
             C.angl = copy(N.angl); C.yx = copy(N.yx)
@@ -877,7 +879,7 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
                             n.fin=1; _N_+=[n]; n_+=[n];ntt+=n.dTT;nc+=n.c; l_+=[L];ltt+=L.dTT;lc+=L.c  # add single n
                             if n.Lt: Lt_+=[n.Lt]  # skip PPs
                         n.root = Gt
-        Gt += [n_,ntt,nc, l_,ltt,lc, 0]; Gt_+=[Gt]; TT+=ntt+ltt; C+=nc+lc; lTT+=ltt; lC+=lc
+        Gt += [n_,ntt,nc, l_,ltt,lc, 0]; Gt_+=[Gt]; TT+=ntt+ltt; C+=nc+lc; nTT+=ntt; lTT+=ltt; nC+=nc; lC+=lc  # nTT and nC are missed out
     G_= []
     for n_,tt,c,l_,ltt,lc,merged in Gt_:
         if not merged:
