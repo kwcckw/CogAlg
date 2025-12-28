@@ -147,7 +147,8 @@ def cross_comp(root, rc, fcon=1, fder=0):  # core function, mediates rng+ and de
             nG_,rc = Cluster(root, mL_,rc, fcon,fder)  # cluster_N|C, 1 level, sub+ in sum2G
             for G in nG_:
                 if G.Bt.d > avd* rc* compw:
-                    lg_,rc = trace_edge(G.B_, rc, G)  # contiguous L.nt-mediated cross_comp
+                    lg_,rc = trace_edge(G.B_, rc, G, fclus=1)  # contiguous L.nt-mediated cross_comp
+                    if lg_: sum2T(G.B_,rc,G,'Bt'); sum2T(lg_,rc,G,'Bt')  # not sure, G.B_ should be remained as B_ or lg_?
         # agg+:
         if nG_ and val_(mTT, rc+connw, TTw(root), mw=(len(nG_)-1)*Lw) > 0:  # mval only
             nG_,rc = trace_edge(root.N_,rc,root)  # comp Ns x N.Bt|B_.nt, with/out mfork?
@@ -840,13 +841,29 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
         if vt_(tile.dTT)[0] > ave:
             return tile
 
-def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
+def trace_edge(N_, rc, root, tT=[], fclus=0):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
 
     L_, cT_, lTT, lc = [],set(),np.zeros((2,9)),0  # comp co-mediated Ns:
-    for N in N_: N.fin = 0
+    for N in N_: 
+        N.fin = 0
+        if fclus: 
+            for n in N.nt: n.fin = 0
     for N in N_:
-        _N_ = [B for rB in N.rN_ if rB.Bt for B in rB.Bt.N_ if B is not N]  # temporary
-        if N.Bt: _N_+= [rN for B in N.Bt.N_ for rN in B.rN_ if rN is not N] + [rB for rB in N.rN_]  # + node-mediated
+        if fclus:  # dfork mediated by connected in-cluster L.nt
+            _L_ = []; __N_ = N.nt[:]; n_ = []  # expand recursively?
+            while __N_:
+                for n in __N_: 
+                    if n.fin: continue
+                    n.fin = 1
+                    for L in n.rim:  # recursively mediated by connected in-cluster's rim
+                        if L in N_ and L not in _L_:  
+                            _L_ += [L]
+                            n_ += L.nt
+                __N_ = n_; n_ = []
+            _N_ = _L_  # rename earlier for clarity
+        else:
+            _N_ = [B for rB in N.rN_ if rB.Bt for B in rB.Bt.N_ if B is not N]  # temporary
+            if N.Bt: _N_+= [rN for B in N.Bt.N_ for rN in B.rN_ if rN is not N] + [rB for rB in N.rN_]  # + node-mediated    
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
