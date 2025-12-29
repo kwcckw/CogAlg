@@ -147,8 +147,9 @@ def cross_comp(root, rc, fcon=1, fder=0):  # core function, mediates rng+ and de
             if not fder:  # no ddfork
                 for G in nG_:  # nested dfork
                     if G.Bt and G.Bt.d > avd * rc * compw:
+                        for B in G.B_: B.exe=1  # for cluster_N, else all will be skipped
                         lg_,_rc = cross_comp(G, rc, fder=1)  # proximity-prior comp B_
-                        if lg_: sum2T(lg_,_rc, G,'Bt')  # in cross_comp?
+                        if lg_: sum2T(lg_,_rc, G,'Bt')  # in cross_comp?  Suppose we need to create B level here? Right now it's packing lg_ as Bt.N_
         # agg+:
         if nG_ and val_(TT, rc+connw, TTw(root), mw=(len(nG_)-1)*Lw) > 0:  # mval only
             nG_,rc = trace_edge(root.N_,rc,root)  # comp Ns x N.Bt|B_.nt, with/out mfork?
@@ -159,15 +160,14 @@ def cross_comp(root, rc, fcon=1, fder=0):  # core function, mediates rng+ and de
 def comp_C_(C_, rc,_C_=[], fall=1):  # simplified for centroids, trans-N_s, levels
     # max attr sort to constrain C_ search in 1D, add K attrs and overlap?
     # proj C.L_: local?
-    N_,L_,mTT,mc, B_,dTT,dc = [],[],np.zeros((2,9)),0, [],np.zeros((2,9)),0
+    N_,L_,TT,c = [],[],np.zeros((2,9)),0
     if fall:
         pairs = product(C_,_C_) if _C_ else combinations(C_,r=2)  # comp between | within list
         for _C, C in pairs:
             dtt = comp_derT(_C.dTT[1], C.dTT[1]); m,d = vt_(dtt,rc); c = min(_C.c,C.c)
             dC = CN(nt=[_C,C], dTT=dtt,m=m,d=d,c=c, span=np.hypot(*_C.yx-C.yx))
             _C.rim += [dC]; C.rim += [dC]
-            if   dC.m > ave*(connw+rc): L_+=[dC]; mTT+=dC.dTT; mc+=c; N_ += [_C,C]
-            elif dC.d > avd*(connw+rc): B_+=[dC]; dTT+=dC.dTT; dc+=c  # not in N_?
+            if   dC.m > ave*(connw+rc): L_+=[dC]; TT+=dC.dTT; c+=c; N_ += [_C,C]
     else:
         # consecutive or distance-constrained cross_comp along eigenvector
         for C in C_: C.compared=set()
@@ -177,14 +177,13 @@ def comp_C_(C_, rc,_C_=[], fall=1):  # simplified for centroids, trans-N_s, leve
             if _C in C.compared: continue
             dy_dx = _C.yx-C.yx; dist = np.hypot(*dy_dx)
             Link = comp_N(_C,C, rc, A=dy_dx, span=dist)  # or comp_derT?
-            if   Link.m > ave*(connw+rc): L_+=[Link]; mTT+=Link.dTT; mc+=Link.c; N_ += [_C,C]
-            elif Link.d > avd*(connw+rc): B_+=[Link]; dTT+=Link.dTT; dc+=Link.c  # not in out_?
+            if   Link.m > ave*(connw+rc): L_+=[Link]; TT+=Link.dTT; c+=Link.c; N_ += [_C,C]
 
-    return list(set(N_)), L_,mTT,mc, B_,dTT,dc
+    return list(set(N_)), L_,TT,c
 
 def comp_N_(iN_, rc, _iN_=[]):
 
-    N_, L_,mTT,mc, B_,dTT,dc, dpTT = [],[],np.zeros((2,9)),0, [],np.zeros((2,9)),0, np.zeros((2,9))
+    N_, L_,TT,c = [],[],np.zeros((2,9)),0
     # get all-to-all pre-links:
     for i, N in enumerate(iN_):
         N.pL_ = []
@@ -212,16 +211,16 @@ def comp_N_(iN_, rc, _iN_=[]):
             if m > 0:
                 if abs(m) < ave:  # different ave for projected surprise value, comp in marginal predictability
                     Link = comp_N(_N,N, lrc, A=dy_dx, span=dist)
-                    if   Link.m > ave: L_+=[Link]; mTT+=Link.dTT; mc+=Link.c; N_ += [_N,N]  # combined CN dTT and L_
-                    elif Link.d > avd: B_+=[Link]; dTT+=Link.dTT; dc+=Link.c  # no overlap to simplify
-                    m = Link.m; dpTT+= pTT-Link.dTT  # prediction error to fit code
+                    if   Link.m > ave: L_+=[Link]; TT+=Link.dTT; c+=Link.c; N_ += [_N,N]  # combined CN dTT and L_
+                    # elif Link.d > avd: B_+=[Link]; dTT+=Link.dTT; dc+=Link.c  # no overlap to simplify  B_ is only added from clustering now
+                    m = Link.m  # prediction error to fit code
                 else:
                     pL = CN(typ=-1, nt=[_N,N], dTT=pTT,m=m,d=d,c=min(N.c,_N.c), angl=np.array([dy_dx,1],dtype=object),span=dist)
                     L_+= [pL]; N.rim+=[pL]; _N.rim+=[pL]  # same as links in clustering
                 pVt_ += [[dist,dy_dx,_N,m]]  # for next rim eval
             else:
                 break  # beyond induction range
-    return list(set(N_)), L_,mTT,mc, B_,dTT,dc  # + dpTT for code-fitting backprop?
+    return list(set(N_)), L_,TT,c  # + dpTT for code-fitting backprop?
 
 def comp_N(_N,N, rc, A=np.zeros(2), span=None):  # compare links, optional angl,span,dang?
 
@@ -296,9 +295,9 @@ def trans_comp(_N,N, rc, root):  # unpack node trees down to numericals and comp
     Rc = rc
     for _F_,F_,nF_,nFt in zip((_N.N_,_N.B_,_N.C_),(N.N_,N.B_,N.C_), ('N_','B_','C_'),('Nt','Bt','Ct')):  # + tN_,tB_,tC_ from trans_cluster?
         if _F_ and F_:  # eval?
-            N_,L_,mTT,mc, B_,dTT,dc = comp_C_(_F_,Rc,F_); dF_= L_+ B_  # callee comp_N may call deeper comp_sub, batch in root?
+            N_,dF_,TT,c = comp_C_(_F_,Rc,F_)  # callee comp_N may call deeper comp_sub, batch in root?
             if dF_:  # trans-links
-                setattr(root,nF_,dF_); setattr(root,nFt, CF(dTT=mTT+dTT,c=mc+dc,root=root)); Rc+=1
+                setattr(root,nF_,dF_); setattr(root,nFt, CF(dTT=TT,c=c,root=root)); Rc+=1
     for _lev,lev in zip(_N.Nt.N_, N.Nt.N_):  # no comp Bt,Ct: external to N,_N
         Rc += 1  # deeper levels are redundant
         tt = comp_derT(_lev.dTT[1],lev.dTT[1]); m,d = vt_(tt,rc)
