@@ -155,7 +155,7 @@ def cross_comp(root, rc, fcon=1, fL=0):  # core function, mediates rng+ and der+
 def comp_C_(C_, rc,_C_=[], fall=1):  # simplified for centroids, trans-N_s, levels
     # max attr sort to constrain C_ search in 1D, add K attrs and overlap?
     # proj C.L_: local?
-    N_,L_,TTm,cm, D_,TTd,cd = [],[],np.zeros((2,9)),[],0,np.zeros((2,9)),0
+    N_,L_,TTm,cm, D_,TTd,cd = [],[],np.zeros((2,9)),0,[],np.zeros((2,9)),0  # 0 and [] are inverted, but we are not using D_ now?
     if fall:
         pairs = product(C_,_C_) if _C_ else combinations(C_,r=2)  # comp between | within list
         for _C, C in pairs:
@@ -213,6 +213,7 @@ def comp_N_(iN_, rc, _iN_=[]):
                     dpTT += pTT-dTT  # prediction error to fit code
                 else:
                     pL = CN(typ=-1, nt=[_N,N], dTT=pTT,m=m,d=d,c=min(N.c,_N.c), angl=np.array([dy_dx,1],dtype=object),span=dist)
+                    TTm += pTT; TTd += pTT; cm += pL.c; cd += pL.c  # we need to accumulate dTT and c since we pack L_?
                     L_+= [pL]; N.rim+=[pL]; _N.rim+=[pL]  # same as links in clustering
                 pVt_ += [[dist,dy_dx,_N,m]]  # for next rim eval
             else:
@@ -702,11 +703,12 @@ def PP2N(PP):
     y,x,Y,X = box; dy,dx = Y+1-y, X+1-x
     A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
     PP = CN(typ=0, N_=P_,L_=L_,B_=B_,dTT=dTT,m=m,d=d,c=c, baseT=baseT,box=box,yx=yx,angl=A,span=np.hypot(dy/2,dx/2))  # set root in trace_edge
+    PP.Nt.c = PP.c; PP.Nt.dTT += PP.dTT; PP.Nt.m = PP.m; PP.Nt.d = PP.d  # Nt's params should be the same as PP, except N_?
     for P in P_: P.root = PP  # empty Nt, Bt, Ct?
     if hasattr(P,'nt'):  # PPd, assign rN_:
         for dP in P_:
             for P in dP.nt: PP.rN_ += [P.root]  # PPm
-    else: sum2T(PP.B_,1, PP,'Bt')
+    # elif PP.B_: sum2T(PP.B_,1, PP,'Bt')  # PP.B_ here is CdP, which we need to sum lg_ into Bt instead?
     return PP
 
 def ffeedback(root):  # adjust filters: all aves *= rV, ultimately differential backprop per ave?
@@ -812,6 +814,10 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                 PPm_ = comp_slice(edge, rV, wTTf)
                 nG_ = [PP2N(PPm) for PPm in PPm_]
                 for PPd in edge.link_: PP2N(PPd)
+                for nG in nG_:
+                    if nG.B_:
+                        lg_ = [B.root for B in nG.B_]
+                        sum2T(lg_,1, nG,'Bt')
                 if val_(np.sum([n.dTT for n in nG_],0), 3, TTw(tile), (len(PPm_)-1)*Lw) > 0:
                     trace_edge(nG_,3, tile, tT)  # flatten, cluster B_-mediated Gs, init Nt
     if G_:
