@@ -315,11 +315,12 @@ def Cluster(root, iL_, rc, fcon=1, fL=0):  # generic clustering root
         for FT in ('tN_','tNt',dN_,0), ('tB_','tBt',dB_,0), ('tC_','tCt',dC_,1):
             if hasattr(root,FT[0]):
                 f_,ft, tL_,fC = FT; frc += 1  # fork redundancy count, re-assign later?
-                Ft = sum2T(tL_,frc, root,ft); N_ = list({n for L in tL_ for n in L.nt})
-                for N in N_: N.exe=1
-                cluster_N(Ft, N_, rc+frc)
-                if val_(Ft.dTT, frc, TTw(root), (len(Ft.N_)-1)*Lw) > 0:
-                    cross_comp(Ft, rc+frc)  # unlikely, doesn't add rc?
+                if tL_:  # skip empty tF_
+                    Ft = sum2T(tL_,frc, root,ft); N_ = list({n for L in tL_ for n in L.nt})
+                    for N in N_: N.exe=1
+                    cluster_N(Ft, N_, rc+frc)
+                    if val_(Ft.dTT, frc, TTw(root), (len(Ft.N_)-1)*Lw) > 0:
+                        cross_comp(Ft, rc+frc)  # unlikely, doesn't add rc?
                 setattr(root,f_,tL_)  # trans-fork_ per trans-G link
 
     def get_exemplars(N_, rc):  # multi-layer non-maximum suppression -> sparse seeds for diffusive centroid clustering
@@ -642,11 +643,11 @@ def sum2T(T_, rc, root, nF, TT=None, c=1):  # N_ -> fork T
     F = CF(root=root, nF=nF); T.root=F  # no L_,B_,C_,Nt,Bt,Ct yet
     if fV: F.dTT=copy(T.dTT); F.c=T.c
     else:  F.dTT=TT; F.c=c
-    if nF=='Nt': F.N_ = ([T.N_] + list(T.Nt.N_)) if T.N_ else []  # deeper H
+    if nF in ('Nt', 'tNt'): F.N_ = ([T.N_] + list(T.Nt.N_)) if T.N_ else []  # deeper H
     for T in T_[1:]:
         T.root = F
         if fV: F.dTT += T.dTT; F.c += T.c
-        if nF=='Nt':  # flat Bt,Ct N_, Lt.N_= []
+        if nF in ('Nt', 'tNt') and F.N_:  # flat Bt,Ct N_, Lt.N_= []
             F.N_[0] += T.N_  # top level is flattened T.N_s
             for Lev,lev in zip_longest(F.N_[1:], T.Nt.N_):  # deeper levels
                 if lev:
@@ -654,7 +655,7 @@ def sum2T(T_, rc, root, nF, TT=None, c=1):  # N_ -> fork T
                     else:   F.N_ += [CopyF(lev, root=F)]
     F.m, F.d = vt_(F.dTT,rc); F.rc = rc
     setattr(root, nF,F)
-    if nF in ('Nt','tNt'):  # no Lt.N_
+    if nF in ('Nt', 'tNt') and F.N_:  # no Lt.N_
         n_ = F.N_[0]; dtt = sum([n.dTT for n in n_]); m,d = vt_(dtt,rc); F.N_[0] = CF(N_=n_,dTT=dtt,m=m,d=d, c=sum([n.c for n in n_]))
     elif nF in ('Bt','Ct','tBt','tCt'): F.N_ = list(T_)
     root_update(root, F)
