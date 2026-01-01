@@ -318,6 +318,8 @@ def Cluster(root, iL_, rc, fcon=1, fL=0):  # generic clustering root
                 for N in N_: N.exe=1
                 cluster_N(Ft, N_,rc)
                 if val_(Ft.dTT, rc, TTw(root), (len(Ft.N_)-1)*Lw) > 0:
+                    Ft.tN_,Ft.tB_,Ft.tC_ = [], [], []
+                    Ft.tNt,Ft.tBt,Ft.tCt = CF(), CF(), CF()  # we need trans in Ft when they become root of cross_comp
                     cross_comp(Ft, rc)  # unlikely, doesn't add rc?
                 Ft_ += [Ft]; rc += 1  # default fork redundancy
             else: Ft_ += [[]]
@@ -460,6 +462,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
                 mat+=M; dif+=D; olp+=O; cnt+=comp  # from all comps?
                 DTT += dTT
                 if M > Ave * len(_N_) * O and val_(dTT, rc+O, TTw(C),(len(C.N_)-1)*Lw):
+                    # Not sure, for C, for reciprocal assignment should be C.Nt.N_ += [n]?
                     for n, mo in zip(_N_,mo_): n.mo_+=[mo]; n.Ct.N_+=[C]; C.Ct.N_+=[n]  # reciprocal root assign
                     C.M += M; C.D += D; C.C += comp; C.DTT += dTT
                     C.N_+=_N_; C._N_ = list(set(_N__))  # core, surround elements
@@ -613,7 +616,7 @@ def sum2G(Ft_, rc, root=None, init=1, fsub=1):  # updates root if not init
             for n in G.N_: n.fin=0; n.exe=1
             _N_,_rc = Cluster(G, L_, rc+1)  # same nodes with higher filter
             if _N_ and subV * ((len(_N_)-1)*Lw) > ave * _rc * compw:
-                cross_comp(G,_rc)  # forms own B_,Bt
+                cross_comp(G,_rc,fcon=0)  # forms own B_,Bt  (fcon should be 0 here?)
     return G
 
 def add_N(G, N):  # flat is currently not used
@@ -854,7 +857,7 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
                     if n in N_:
                         if n.root is Gt: continue
                         if n.fin:  # merge n root
-                            _root = n.root; n_+=_root[0]; ntt+=_root[1]; nc+=_root[2]; l_+=_root[3]; ltt+=_root[4]; lc+=_root[5]; root[6]=1
+                            _root = n.root; n_+=_root[0]; ntt+=_root[1]; nc+=_root[2]; l_+=_root[3]; ltt+=_root[4]; lc+=_root[5]; _root[6]=1  # should be _root instead of root
                             for _n in _root[0]: _n.root = Gt; Lt_ += [_n.Lt] if _n.Lt else []
                         else:
                             n.fin=1; _N_+=[n]; n_+=[n];ntt+=n.dTT;nc+=n.c; l_+=[L];ltt+=L.dTT;lc+=L.c  # add single n
