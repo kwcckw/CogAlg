@@ -360,8 +360,9 @@ def cluster_N(root, iL_, rc, fL=0):  # flood-fill node | link clusters, flat
                     for n in N.N_: add_N(_N, n); _N.N_ += [n]
                     for l in N.rim: l.nt = [_N if n is N else n for n in l.nt]
                     N_ += [_N]; xN_+=[N]
+                    if N in N_: N_.remove(N)  # N could be _N in prior loop and added to N_, so we need to remove _N added in prior loop
             else: L_ =_L_[i:]; break
-            if xN_: root.N_ = set(root.N_) - set(xN_)
+            if xN_: root.N_ = set(root.N_) - set(xN_); 
         return N_,L_
 
     if root.N_[0].typ==3: _N_,iL_ = merge_C_(iL_)  # merge similar Cs, not dCs, no recomp
@@ -454,7 +455,7 @@ def cluster_C(root, L_, rc):  # form centroids by clustering exemplar surround v
             _Ct_ = [[c, c.m/c.c if c.m !=0 else eps, c.rc] for c in _C_]
             for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
                 if _m > Ave * _o:
-                    C = cent_TT( sum2G([[_C.N_,np.sum([N.dTT for N in _C.N_],axis=0),sum([N.c for N in _C.N_])]], rc, root, fsub=0), rc, init=1)
+                    C = cent_TT( sum2G([[_C.N_,np.sum([N.dTT for N in _C.N_],axis=0),sum([N.c for N in _C.N_])]], rc, root, typ=3, fsub=0), rc, init=1)
                     # C update lags behind N_; non-local C.rc += N.mo_ os?
                     _N_,_N__,mo_,M,D,O,comp,dTT,dm,do = [],[],[],0,0,0,0,np.zeros((2,9)),0,0  # per C
                     for n in _C._N_:  # core+ surround
@@ -497,7 +498,6 @@ def cluster_C(root, L_, rc):  # form centroids by clustering exemplar surround v
                 Ct = sum2T(C_,rc,root, nF='Ct')
                 Ct.tNt, Ct.tBt, Ct.tCt = CF(),CF(),CF()
                 # re-order C_ along argmax(root.wTT): eigenvector?
-                # fcon must be > 0 here?
                 _,rc = cross_comp(Ct, rc, fcon=2)  # distant Cs, different attr weights, no cross_comp dCs?
                 root.C_=C_; root.Ct=Ct; root_update(root,Ct)
     return C_, rc
@@ -579,7 +579,7 @@ def Copy_(N, root=None, init=0, typ=None):
                 C.mo_ = deepcopy(getattr(N, 'mo_', []))  # + N,D,C,DTT?
     return C
 
-def sum2G(Ft_, rc, root=None, init=1, fsub=1):  # updates root if not init
+def sum2G(Ft_, rc, root=None, init=1, typ=2, fsub=1):  # updates root if not init
 
     N_,ntt,nc = Ft_[0]; L_,ltt,lc = [],np.zeros((2,9)),0; B_,C_ = [],[]  # init tt,c s if B_
     if len(Ft_)>1: L_,ltt,lc = Ft_[1]  # in trace_edge
@@ -591,7 +591,7 @@ def sum2G(Ft_, rc, root=None, init=1, fsub=1):  # updates root if not init
     # batch root_updates: n.dTT += update_dTT_?
     for n in N_: n.m, n.d = vt_(n.dTT,rc)
     N = N_[0]
-    G = Copy_(N,root, init=1,typ=2)
+    G = Copy_(N,root, init=1,typ=typ)  # added typ for C
     G.N_ = N_; G.dTT=ntt+ltt; G.c=nc+lc; G.rc=rc
     nt = N.Nt; l0 = CF(N_=list(N.N_), dTT=deepcopy(nt.dTT), m=nt.m,d=nt.d,c=nt.c,root=G.Nt)
     G.Nt.N_ = [l0]+ [CopyF(lev,G.Nt) for lev in nt.N_]; G.Nt.dTT=deepcopy(N.dTT); G.Nt.m=N.m; G.Nt.d=N.d; G.Nt.c=N.c; G.Nt.root=G
@@ -638,7 +638,7 @@ def sum2G(Ft_, rc, root=None, init=1, fsub=1):  # updates root if not init
 def add_N(G, N):  # flat is currently not used
 
     N.fin = 1; N.root = G
-    fC = hasattr(N,'mo_')  # centroid
+    fC = hasattr(G,'mo_')  # centroid (should be G.typ here? Because we may init G with C from deeper cross_comp called from cluster_C)
     _c,c = G.c,N.c; C=_c+c  # weigh contribution of intensive params
     if fC: G.rc = np.sum([mo[1] for mo in N.mo_]); G.rN_+=N.rN_; G.mo_+=N.mo_
     if N.typ:  # not PP
@@ -851,7 +851,8 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
     for N in N_: N.fin = 0
     for N in N_:
         _N_ = [B for rB in N.rN_ if rB.Bt for B in rB.Bt.N_ if B is not N]  # temporary
-        if N.Bt: _N_+= [rN for B in N.Bt.N_ for rN in B.rN_ if rN is not N] + [rB for rB in N.rN_]  # + node-mediated
+        if N.typ >0:  _N_ += [n.root for B in N.B_ for n in B.nt if isinstance(n.root, CN) and n.root is not root]  # skip CF (Nt) and root, get only graph
+        elif N.Bt:    _N_+= [rN for B in N.Bt.N_ for rN in B.rN_ if rN is not N] + [rB for rB in N.rN_]  # + node-mediated
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
@@ -945,7 +946,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9))):  # a
             return Fg_
 
     global ave,avd, Lw, intw, cw,nw, centw,connw, distw, mW, dW
-    ave,avd, Lw, intw, cw,nw, centw,connw, distw = np.array([ave,avd, Lw, intw, nw, centw, connw, distw]) / rV
+    ave,avd, Lw, intw, cw,nw, centw,connw, distw = np.array([ave,avd, Lw, intw, cw, nw, centw, connw, distw]) / rV  # cw is missed out
 
     frame = CN(box=np.array([0,0,Y,X]), yx=np.array([Y//2, X//2]))
     Fg=[]; elev=0
