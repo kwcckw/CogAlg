@@ -182,7 +182,8 @@ def comp_C_(C_, rc,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s
                     for l in c.rim: l.nt = [_c if n is c else n for n in l.nt]
                     C_ += [_c]; exc_+=[c]
                     if c in C_: C_.remove(c)
-                else: L_ = dC_[i:]; break
+                elif dC_[i:]:  # not on the last L? else L_ becomes empty 
+                    L_ = dC_[i:]; break
     else:
         # consecutive or distance-constrained cross_comp along eigenvector
         for C in C_: C.compared=set()
@@ -398,11 +399,15 @@ def cluster_N(root, _N_, rc, fL=0):  # flood-fill node | link clusters, flat, re
                 if C_: tt += ct*cc*(cr/len(C_)); c+=cc
                 if val_(tt, rc, TTw(root), (len(N_)-1)*Lw) > 0 or fL:
                     G = sum2G(((N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc)), rc,root)  # br,cr?
-                    if not fL and G.Bt and G.Bt.d > avd * rc * nw:  # no ddfork
-                        lg_,_rc = cross_comp(G, rc, fL=1)  # proximity-prior comp B_
-                        if lg_: sum2T(lg_,_rc,G,'Bt')
                     N__+= N_; L__+=L_; Lt_+=[n.Lt for n in N_]; TT+=tt; nTT+=nt; lTT+=lt; C+=c; nC+=nc; lC+=lc  # G.TT * cr * rcr?
                     G_ += [G]
+            
+        # this should be after we form all Gs, else their fin will be reset in deeper cross_comp
+        for G in G_:
+            if not fL and G.Bt and G.Bt.d > avd * rc * nw:  # no ddfork
+                lg_,_rc = cross_comp(G, rc, fL=1)  # proximity-prior comp B_
+                if lg_: sum2T(lg_,_rc,G,'Bt')
+                    
         if G_ and (fL or val_(TT, rc+1, TTw(root), (len(G_)-1)*Lw)):  # include singleton lGs
             rc += 1
             root_replace(root,rc, G_,N__,L__,Lt_,TT,nTT,lTT,C,nC,lC)
@@ -426,7 +431,8 @@ def get_exemplars(N_, rc):  # multi-layer non-maximum suppression -> sparse seed
     E_ = set()
     for rdn, N in enumerate(sorted(N_, key=lambda n:n.em, reverse=True), start=1):  # strong-first
         oL_ = set(N.rim) & {l for e in E_ for l in e.rim}
-        roV = (vt_(np.sum([l.dTT for l in oL_], axis=0), rc)[0] if oL_ else 0) if oL_ else 0 / (N.em or eps)  # relative rim olp V
+        # we need an additional bracket here, otherwise the if section will not be divided by (N.em or eps)
+        roV = ((vt_(np.sum([l.dTT for l in oL_], axis=0), rc)[0] if oL_ else 0) if oL_ else 0) / (N.em or eps)  # relative rim olp V
         if N.em * N.c > ave * (rc+rdn+nw+ roV):  # ave *= rV of overlap by stronger-E inhibition zones
             E_.update({n for l in N.rim for n in l.nt if n is not N and N.em > ave*rc})  # selective nrim
             N.exe = 1  # in point cloud of focal nodes
