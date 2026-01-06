@@ -500,8 +500,9 @@ def cluster_C_par(_C_,N_):  # C_= exemplars, N_= root.N_
 
     for C in _C_:  # fixed while training, then prune if weak C.v
         C.N_ = N_  # soft assign all Ns per C
-        C.v = C.m = C.o = 0
-    _M = M = 0; C_L = len(_C_)
+        C.v = C.m  # we need to init v = m for the first iteration? Else their v always 0
+        C.o = 0
+    _M = M = 0; C_L = len(_C_); C_ = copy(_C_)  # init C_ as _C_ 
     while True:
         for N in N_:
             N.m_ = [vt_(base_comp(C,N)[0])[0] for C in C_]
@@ -509,10 +510,11 @@ def cluster_C_par(_C_,N_):  # C_= exemplars, N_= root.N_
             M += sum(N.m_)
         C_ = []
         for i, _C in enumerate(_C_):  #
-            C = CN(root=_C.root)  # or CF?
+            C = CN(Nt=CF(N_=[CF()]), root=_C.root); C.v = C.m = C.o = 0 # or CF?
             for N in _C.N_:
-                icoef = (N.m_[i] - ave * N.o_[i]) * (_C.V / C_L)  # weigh N by normed C value?
-                add_N(C, scale(N,icoef))  # soft assign: scale element N by its inclusion coef, not implemented
+                icoef = (N.m_[i] - ave * N.o_[i]) * (_C.v / C_L)  # weigh N by normed C value? 
+                add_N(C, N, icoef)  # soft assign: scale element N by its inclusion coef, not implemented
+            # o and m is not updated? It should be updated after we added Ns into C.N_?
             C_ += [C]  # updated with new icoefs and _C.M
         if abs(M-_M) < ave*centw:
             break  # convergence
@@ -648,27 +650,28 @@ def sum2G(Ft_, tt,c,rc, root=None, init=1, typ=2, fsub=1):  # updates root if no
                 cross_comp(G,_rc)  # forms own B_,Bt
     return G
 
-def add_N(G, N):  # flat is currently not used
+# we just need to include coef here instead of using scale function?
+def add_N(G, N, coef=1):  # flat is currently not used
 
     N.fin = 1; N.root = G
     fC = hasattr(G,'mo_')  # centroid
-    _c,c = G.c,N.c; C=_c+c  # weigh contribution of intensive params
-    if fC: G.rc = np.sum([mo[1] for mo in N.mo_]); G.rN_+=N.rN_; G.mo_+=N.mo_
+    _c,c = G.c,N.c*coef; C=_c+c  # weigh contribution of intensive params
+    if fC: G.rc = np.sum([mo[1]*coef for mo in N.mo_]); G.rN_+=N.rN_; G.mo_+=N.mo_
     if N.typ:  # not PP
         G.rN_ += N.rN_  # if N is link| cent?
-        l0 = G.Nt.N_[0]; l0.dTT+=N.dTT; l0.c+=N.c; l0.N_ += N.N_  # flatten in new lev
+        l0 = G.Nt.N_[0]; l0.dTT+=N.dTT*coef; l0.c+=N.c*coef; l0.N_ += N.N_  # flatten in new lev
         for Lev,lev in zip_longest(G.Nt.N_[1:], N.Nt.N_, fillvalue=None):
             if lev:  # norm /C?
                 if Lev is None: G.Nt.N_ += [CopyF(lev, root=G.Nt)]
-                else: Lev.N_ += lev.N_; Lev.dTT+=lev.dTT; Lev.c+=lev.c  # flat
+                else: Lev.N_ += lev.N_; Lev.dTT+=lev.dTT*coef; Lev.c+=lev.c*coef  # flat
         if N.C_:  # flat? L_,B_ stay nested
-            G.C_ += N.C_; G.Ct.dTT += N.Ct.dTT; G.Ct.c += N.Ct.c
-        G.span = (G.span*_c+N.span*c) / C
-        A,a = G.angl[0],N.angl[0]; A[:] = (A*_c+a*c) /C  # vect only
+            G.C_ += N.C_; G.Ct.dTT += N.Ct.dTT*coef; G.Ct.c += N.Ct.c*coef
+        G.span = (G.span*_c+N.span*c*coef) / C * coef
+        A,a = G.angl[0],N.angl[0]; A[:] = (A*_c+a*c*coef) /C * coef  # vect only
         if isinstance(G.yx, list): G.yx += [N.yx]  # weigh by C?
     if N.typ>1: # nodes
-        G.baseT = (G.baseT*_c+ N.baseT*c) /C
-        G.mang = (G.mang*_c + N.mang*c) /C
+        G.baseT = (G.baseT*_c+ N.baseT*c*coef) /C
+        G.mang = (G.mang*_c + N.mang*c*coef) /C
         G.box = extend_box(G.box, N.box)
     # if N is Fg: margin = Ns of proj max comp dist > min _Fg point dist: cross_comp Fg_?
     return N
@@ -885,7 +888,7 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
             if vt_(Link.dTT)[0] >ave*Rc:
                 L_+=[Link]; lTT+=Link.dTT; lc+=Link.c
     # totals:
-    Gt_,Lt_,TT,nTT,lTT,C,nC,lC = [],[],np.zeros((2,9)),np.zeros((2,9)),np.zeros((2,9)),0,0,0  # Lt_: top lev / G?
+    Gt_,Lt_,nTT,lTT,nC,lC = [],[],np.zeros((2,9)),np.zeros((2,9)),0,0  # Lt_: top lev / G?
     for N in N_:  # flood-fill G per seed N
         if N.fin: continue
         N.fin=1; _N_=[N]; Gt=[]; N.root=Gt; n_,ntt,nc, l_,ltt,lc = [N],np.zeros((2,9)),0,[],np.zeros((2,9)),0  # Gt
@@ -903,12 +906,13 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
                             n.fin=1; _N_+=[n]; n_+=[n];ntt+=n.dTT;nc+=n.c; l_+=[L];ltt+=L.dTT;lc+=L.c  # add single n
                             if n.Lt: Lt_+=[n.Lt]  # skip PPs
                         n.root = Gt
-        Gt += [n_,ntt,nc, l_,ltt,lc, 0]; Gt_+=[Gt]; TT+=ntt+ltt;C+=nc+lc; nTT+=ntt;lTT+=ltt; nC+=nc;lC+=lc
+        Gt += [n_,ntt,nc, l_,ltt,lc, 0]; Gt_+=[Gt]; nTT+=ntt;lTT+=ltt; nC+=nc;lC+=lc
     G_= []
-    for n_,tt,c,l_,ltt,lc,merged in Gt_:
+    TT = nTT*nC + lTT*lC; C = nC+lC  # so TT should be recomputed here now?
+    for n_,ntt,nc,l_,ltt,lc,merged in Gt_:
         if not merged:
-            if vt_(tt,rc)[0] > ave*rc:
-                G_ += [sum2G(((n_,tt,c),(l_,ltt,lc)), rc,root, fsub=0)]  # include singletons
+            if vt_(TT,rc)[0] > ave*rc:
+                G_ += [sum2G(((n_,ntt,nc),(l_,ltt,lc)), TT, C, rc,root, fsub=0)]  # include singletons
             else:
                 for N in n_: N.fin=0; N.root=root
     if val_(TT, rc+1, TTw(root), mw=1 if tT else (len(G_)-1)*Lw) > 0:
