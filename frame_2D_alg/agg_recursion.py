@@ -512,37 +512,45 @@ def cluster_C_par(_C_,N_):  # C_= exemplars, N_= root.N_
         for i, _C in enumerate(_C_):
             n_ = sorted(N_, key=lambda n: n.m_[i], reverse=True)
             C = Copy_(n_[0],init=1,typ=3)  # start with _C medoid?
-            for N in n_[1:]:
+            for i, N in enumerate(n_[1:], start=1):
                 icoef = (N.m_[i]- ave*N.o_[i]) * (_C.m / C_L)  # N_incl * C_val: likely final survival?
-                add2C(C, N, icoef)  # soft assign: + (*N) * inclusion coef
+                # keep c positive (treat coef<=0 as exclusion / inhibition upstream)
+                if icoef> 0: add2C(C, N, icoef, fin = i==len(n_)-1)  # soft assign: + (*N) * inclusion coef
             C_ += [C]  # updated with new icoefs and _C.m
-        if abs(M-_M) < ave*centw:
+        if abs(M-_M) < ave*centw*1000:  # 1000 is temporary, need a larger scale for large Ms
             break  # convergence
         _M = M
-    return [C for C in C_ if C.M > ave*C.rc]  # add C.N_ pruning
+        _C_ = C_  # we need to update _C_ too
 
-# draft by GPT:
-def add2C(C, N, coef=1):  # fuzzy add: update only params used in base_comp, don't touch N
+    return [C for C in C_ if C.m > ave*C.rc]  # add C.N_ pruning
 
-    if coef <= 0: return  # keep c positive (treat coef<=0 as exclusion / inhibition upstream)
-    _c,c = C.c, N.c*coef; Cc = _c + c
-    C.dTT = (C.dTT*_c + N.dTT*c) / Cc
-    C.baseT = (C.baseT*_c + N.baseT*c) / Cc
-    C.span  = (C.span*_c  + N.span*c) / Cc
-    C.mang  = (C.mang*_c  + N.mang*c) / Cc
-    A,a = C.angl[0], N.angl[0]; A[:] = (A*_c + a*c) / Cc
-    if isinstance(C.yx, list): C.yx = np.array(C.yx[0], float)  # Copy_(init>=2) sets yx=[N.yx]
+
+def add2C(C, N, coef=1, fin=0):  # fuzzy add: update only params used in base_comp, don't touch N
+
+    C.c += N.c * coef
+    C.dTT += N.dTT*coef
+    C.baseT += N.baseT*coef
+    C.span += N.span*coef
+    C.mang += N.mang*coef
+    A,a = C.angl[0], N.angl[0]; A += a*coef
+    if not isinstance(C.yx, list): C.yx = [C.yx]
+    C.yx += [N.yx]
     C.box = extend_box(C.box, N.box)
-    C.rc = (C.rc*_c + N.rc*c) / Cc
-    C.yx = (C.yx*_c + N.yx*c) / Cc
-    C.c = Cc; C.N_ += [N]  # len(C.N_) is used in base_comp as density proxy
+    C.rc += N.rc*coef
+    C.N_ += [N]  # len(C.N_) is used in base_comp as density proxy
+    if fin:
+        n = len(C.N_)
+        C.dTT /= n
+        C.baseT /= n
+        C.span /= n
+        C.mang /= n
+        dir = np.sign(C.dTT[1] @ wTTf[1]); C.angl[1] = dir if dir else 1
+        C.angl[0] /= n; C.angl[1] = dir
+        C.rc /= n
+        C.c /= n
+        C.yx = np.mean(C.yx, axis=0)
+        C.m, C.d = vt_(C.dTT, C.rc)
 
-def fin_C(C, rc=1):  # finalize centroid after add_Nf
-
-    if isinstance(C.yx, list): C.yx = np.array(C.yx[0], float)
-    dir = np.sign(C.dTT[1] @ wTTf[1]); C.angl[1] = dir if dir else 1
-    C.m, C.d = vt_(C.dTT, rc)
-    return C
 
 def cent_TT(C, rc, init=0):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
