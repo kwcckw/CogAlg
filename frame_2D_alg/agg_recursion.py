@@ -148,7 +148,7 @@ def cross_comp(root, rc, fL=0):  # core function mediating recursive rng+ and de
             E_ = get_exemplars({N for L in L_ for N in L.nt if N.em}, rc)  # exemplar N_| C_
             if fcon:
                 nG_,rc = cluster_N(root, E_,rc, fL)  # form Bt, sub+ in sum2G
-            else:  # centroid clustering if sub+ and dm/ddist
+            else:  # centroid clustering if sub+ & dm/ddist, but cluster_C_par is global?
                 nG_,rc = cluster_C(root, E_,rc)
         if nG_ and val_(root.dTT, rc+(cw,nw)[fcon], TTw(root), (len(root.N_)-1)*Lw,1, TTd,cr) > 0:
             nG_,rc = cross_comp(root,rc)  # agg+
@@ -390,11 +390,10 @@ def cluster_N(root, _N_, rc, fL=0):  # flood-fill node | link clusters, flat, re
                 for i, (F_,tt,c,r) in enumerate(Ft_):
                     for F in F_:
                         tt += F.dTT; Ft_[i][2] += F.c
-                        if i>1: Ft_[i][3] += F.rc  # Bt,Ct rdn only?
-                (N_,nt,nc,_),(L_,lt,lc,_), (B_,bt,bc,br),(C_,ct,cc,cr) = Ft_
-                tt = nt*nc + lt*lc; c = nc+lc
-                if B_: bc*=br/rc; C=c+bc; tt = (tt*c+bt*bc)/C; c+=bc
-                if C_: cc*=cr/rc; C=c+bc; tt = (tt*c+bt*bc)/C; c+=bc
+                        if i>1: Ft_[i][3] += F.rc  # define Bt,Ct rc /= ave node rc?
+                (N_,nt,nc,_),(L_,lt,lc,_),(B_,bt,bc,br),(C_,ct,cc,cr) = Ft_
+                c = nc + lc + bc*br + cc*cr
+                tt = (nt*nc + lt*lc + bt*bc*br + ct*cc*cr) / c
                 if val_(tt,rc, TTw(root), (len(N_)-1)*Lw) > 0 or fL:
                     G = sum2G(((N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc)), tt,c, rc,root)  # br,cr?
                     if not fL and G.Bt and G.Bt.d > avd * rc * nw:  # no ddfork
@@ -429,7 +428,8 @@ def get_exemplars(N_, rc):  # multi-layer non-maximum suppression -> sparse seed
         if N.em * N.c > ave * (rc+rdn+nw+ roV):  # ave *= rV of overlap by stronger-E inhibition zones
             E_.update({n for l in N.rim for n in l.nt if n is not N and N.em > ave*rc})  # selective nrim
             N.exe = 1  # in point cloud of focal nodes
-        else: break  # the rest of N_ is weaker, trace via rims
+        else:
+            break  # the rest of N_ is weaker, trace via rims
     return E_
 
 def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround via rims of new member nodes, within root
@@ -500,26 +500,49 @@ def cluster_C_par(_C_,N_):  # C_= exemplars, N_= root.N_
 
     for C in _C_:  # fixed while training, then prune if weak C.v
         C.N_ = N_  # soft assign all Ns per C
-        C.v = C.m  # we need to init v = m for the first iteration? Else their v always 0
-        C.o = 0
-    _M = M = 0; C_L = len(_C_); C_ = copy(_C_)  # init C_ as _C_ 
+        C.m,C.d,C.rc = C.em,C.ed, np.mean([l.rc for l in C.rim])  # not sure
+    _M= M= 0  # _D= D= 0  # split C.N_ into N_ and D_: summed in D, distinctiveness?
+    C_L = len(_C_)
     while True:
         for N in N_:
-            N.m_ = [vt_(base_comp(C,N)[0])[0] for C in C_]
+            N.m_, N.d_, N.r_ = zip(*[vt_(base_comp(C,N)[0]) + (C.rc,) for C in _C_])  # include C.rc
             N.o_ = np.argsort(np.argsort(N.m_)[::-1])  # rank of each C_[i] = rdn of C in C_
             M += sum(N.m_)
         C_ = []
-        for i, _C in enumerate(_C_):  #
-            C = CN(Nt=CF(N_=[CF()]), root=_C.root); C.v = C.m = C.o = 0 # or CF?
-            for N in _C.N_:
-                icoef = (N.m_[i] - ave * N.o_[i]) * (_C.v / C_L)  # weigh N by normed C value? 
-                add_N(C, N, icoef)  # soft assign: scale element N by its inclusion coef, not implemented
-            # o and m is not updated? It should be updated after we added Ns into C.N_?
-            C_ += [C]  # updated with new icoefs and _C.M
+        for i, _C in enumerate(_C_):
+            n_ = sorted(N_, key=lambda n: n.m_[i], reverse=True)
+            C = Copy_(n_[0],init=1,typ=3)  # start with _C medoid?
+            for N in n_[1:]:
+                icoef = (N.m_[i]- ave*N.o_[i]) * (_C.m / C_L)  # N_incl * C_val: likely final survival?
+                add2C(C, N, icoef)  # soft assign: + (*N) * inclusion coef
+            C_ += [C]  # updated with new icoefs and _C.m
         if abs(M-_M) < ave*centw:
             break  # convergence
         _M = M
-    return [C for C in C_ if C.M > ave*C.rc]
+    return [C for C in C_ if C.M > ave*C.rc]  # add C.N_ pruning
+
+# draft by GPT:
+def add2C(C, N, coef=1):  # fuzzy add: update only params used in base_comp, don't touch N
+
+    if coef <= 0: return  # keep c positive (treat coef<=0 as exclusion / inhibition upstream)
+    _c,c = C.c, N.c*coef; Cc = _c + c
+    C.dTT = (C.dTT*_c + N.dTT*c) / Cc
+    C.baseT = (C.baseT*_c + N.baseT*c) / Cc
+    C.span  = (C.span*_c  + N.span*c) / Cc
+    C.mang  = (C.mang*_c  + N.mang*c) / Cc
+    A,a = C.angl[0], N.angl[0]; A[:] = (A*_c + a*c) / Cc
+    if isinstance(C.yx, list): C.yx = np.array(C.yx[0], float)  # Copy_(init>=2) sets yx=[N.yx]
+    C.box = extend_box(C.box, N.box)
+    C.rc = (C.rc*_c + N.rc*c) / Cc
+    C.yx = (C.yx*_c + N.yx*c) / Cc
+    C.c = Cc; C.N_ += [N]  # len(C.N_) is used in base_comp as density proxy
+
+def fin_C(C, rc=1):  # finalize centroid after add_Nf
+
+    if isinstance(C.yx, list): C.yx = np.array(C.yx[0], float)
+    dir = np.sign(C.dTT[1] @ wTTf[1]); C.angl[1] = dir if dir else 1
+    C.m, C.d = vt_(C.dTT, rc)
+    return C
 
 def cent_TT(C, rc, init=0):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
@@ -650,7 +673,6 @@ def sum2G(Ft_, tt,c,rc, root=None, init=1, typ=2, fsub=1):  # updates root if no
                 cross_comp(G,_rc)  # forms own B_,Bt
     return G
 
-# we just need to include coef here instead of using scale function?
 def add_N(G, N, coef=1):  # flat is currently not used
 
     N.fin = 1; N.root = G
@@ -714,7 +736,7 @@ def root_replace(root, rc, G_, N_,L_,Lt_,TT,nTT,lTT,C,nc,lc):
 
     root.N_= G_; root.dTT=TT; root.c=C
     root.rc = rc  # not sure
-    if hasattr(root, 'wTT'): cent_TT(root, root.rc)
+    if hasattr(root,'wTT'): cent_TT(root, root.rc)
     sum2T(G_,rc, root,'Nt',nTT,nc)
     sum2T(L_,rc, root,'Lt',lTT,lc)
     lTT,lc = np.zeros((2,9)),0  # reset for top nested lev
@@ -907,8 +929,7 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
                             if n.Lt: Lt_+=[n.Lt]  # skip PPs
                         n.root = Gt
         Gt += [n_,ntt,nc, l_,ltt,lc, 0]; Gt_+=[Gt]; nTT+=ntt;lTT+=ltt; nC+=nc;lC+=lc
-    G_= []
-    TT = nTT*nC + lTT*lC; C = nC+lC  # so TT should be recomputed here now?
+    C = nC+lC; TT = (nTT*nC + lTT*lC) / C; G_ = []
     for n_,ntt,nc,l_,ltt,lc,merged in Gt_:
         if not merged:
             if vt_(TT,rc)[0] > ave*rc:
