@@ -501,13 +501,23 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
 
 def cluster_C_par(_C_,N_):  # C_= exemplars, N_= root.N_, switch from cluster_C if global overlap >min
 
+    def prune_N_(C, i):  # draft
+        N_ = []
+        m_, d_, r_, o_ = [], [], [], []
+        for N in C.N_:
+            m, d, r, o = N.m_[i], N.d_[i], N.r_[i], N.o_[i]
+            # prune if fail eval
+            if m/o > sum(N.m_)/sum(N.o_):  # not sure, temporary
+                N_ += [N]; m_ += [m]; d_ += [d]; r_ += [r]; o_ += [o]
+            N.N_= N_; N.m_ = m_; N.d_ = d_; N.r_ = r_; N.o_ = o_  
+        
     def sum2C(N_,_C, i):  # fuzzy sum params used in base_comp
 
-        c_, rc_, dTT_, baseT_, span_, yx_ = zip(*[(n.c, n.rc, n.dTT, n.baseT, n.span, n.yx)] for n in N_)
+        c_, rc_, dTT_, baseT_, span_, yx_ = zip(*[(n.c, n.rc, n.dTT, n.baseT, n.span, n.yx) for n in N_])  # the placement of bracket is wrong here
         icoef_ = [(N.m_[i] / (ave*N.o_[i])) * (_C.m / C_L) for N in N_]
         # N_incl *= C_val: pre-selection by likely final survival, to skip post-prune selection?
-        c_ = [c * ic for c,ic in zip(c_,icoef_)]
-        tot = sum(c_); Par_ = []
+        c_ = [c * max(ic, 0) for c,ic in zip(c_,icoef_)]
+        tot = sum(c_)+eps; Par_ = []
         for par_ in rc_, dTT_, baseT_, span_, yx_:
             Par_.append(sum([p * c for p,c in zip(par_,c_)]))
         C = CN(N_=N_, c=tot, typ=3)
@@ -522,17 +532,18 @@ def cluster_C_par(_C_,N_):  # C_= exemplars, N_= root.N_, switch from cluster_C 
     C_L = len(_C_)
     while True:
         for N in N_:
+            # N.m_ may be negative after base_comp
             N.m_, N.d_, N.r_ = zip(*[vt_(base_comp(C,N)[0]) + (C.rc,) for C in _C_])  # include C.rc
             N.o_ = np.argsort(np.argsort(N.m_)[::-1]) + 1  # rank of each C_[i] = rdn of C in C_
             M += sum(N.m_)
         C_ = []
         for i, _C in enumerate(_C_):
-            n_ = sorted(N_, key=lambda n: n.m_[i], reverse=True)
+            n_ = sorted(N_, key=lambda n: n.m_[i], reverse=True)  # why we need to sort here? All of them will be used anyway?
             C_ += [sum2C(n_,_C, i)]  # update with new icoefs,_C.m
         if abs(M-_M) < ave*centw:
             break  # convergence
-        _M = M; _C_ = C_
-    return [C for C in C_ if C.m > ave*C.rc]  # add C.N_ pruning
+        _M = M; M = 0; _C_ = C_  # we need to reset M too?
+    return [prune_N_(C, i) for i, C in enumerate(C_) if C.m > ave*C.rc]  # add C.N_ pruning
 
 def cent_TT(C, rc, init=0):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
