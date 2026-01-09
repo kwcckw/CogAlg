@@ -452,7 +452,8 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
         _Ct_ = [[c, c.m/c.c if c.m !=0 else eps, c.rc] for c in _C_]
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave * _o:
-                C = cent_TT( sum2G([[_C.N_,np.sum([N.dTT for N in _C.N_],axis=0),sum([N.c for N in _C.N_])]], rc, root, typ=3, fsub=0), rc, init=1)
+                dTT, c = np.sum([N.dTT for N in _C.N_],axis=0), sum([N.c for N in _C.N_])
+                C = cent_TT( sum2G([[_C.N_,dTT,c]], dTT.copy(),c,rc, root, typ=3, fsub=0), rc, init=1)
                 # C update lags behind N_; non-local C.rc += N.mo_ os?
                 _N_,_N__,mo_,M,D,O,comp,dTT,dm,do = [],[],[],0,0,0,0,np.zeros((2,9)),0,0  # per C
                 for n in _C._N_:  # core+ surround
@@ -484,6 +485,10 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
         if Dm/Do > Ave:  # dval vs. dolp, overlap increases as Cs may expand in each loop
             _C_ = C_
             for n in root.N_: n._C_=n.Ct.N_; n._mo_=n.mo_; n.Ct.N_,n.mo_ = [],[]  # new n.Ct.N_s, combine with vo_ in Ct_?
+            # switch from cluster_C if global overlap >min
+            if Do > ave:  # not sure, something like this? 
+                C_ = cluster_C_par(_C_,root.N_)
+                break
         else:  # converged
             break
     C_ = [C for C in C_ if val_(C.DTT, rc, TTw(C))]  # prune C_
@@ -492,11 +497,16 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
             n.exe = (n.D if n.typ==1 else n.M) + np.sum([mo[0]-ave*mo[1] for mo in n.mo_]) - ave
             # exemplar V + sum n match_dev to Cs, m * ||C rvals?
         if val_(DTT, rc+olp, TTw(root), (len(C_)-1)*Lw) > 0:
+            '''
             Ct = sum2T(C_,rc,root, nF='Ct')
             Ct.tNt, Ct.tBt, Ct.tCt = CF(),CF(),CF()
             # re-order C_ along argmax(root.wTT): eigenvector?
             _,rc = cross_comp(Ct, rc)  # distant Cs, different attr weights, no cross_comp dCs?
             root.C_=C_; root.Ct=Ct; root_update(root,Ct)
+            '''
+            # if cluster_C is called in sub+ now, that's mean it's a Nfork now to replace N_? We will never get Ct?
+            Nt = sum2T(C_,rc,root, nF='Nt')
+            root.N_ = C_; root_update(root,Nt)
     return C_, rc
 
 def cluster_C_par(_C_,N_):  # C_ formed in cluster_C, N_= root.N_, switch from cluster_C if global overlap >min
@@ -522,7 +532,7 @@ def cluster_C_par(_C_,N_):  # C_ formed in cluster_C, N_= root.N_, switch from c
     C_L = len(_C_)
     while True:
         for N in N_:
-            N.m_,N.d_,N.r_ = zip(*[vt_(base_comp(C,N)[0]) + (C.rc,) for C in _C_])
+            N.m_,N.d_,N.r_ = map(list, zip(*[vt_(base_comp(C,N)[0]) + (C.rc,) for C in _C_]))  # convert from tuple to list, to enable the reassignment of Cv_ later
             N.o_ = np.argsort(np.argsort(N.m_)[::-1]) + 1  # rank of each C_[i] = rdn of C in C_
             M += sum(N.m_)
         C_ = []
@@ -616,7 +626,7 @@ def Copy_(N, root=None, init=0, typ=None):
                 C.mo_ = deepcopy(getattr(N, 'mo_', []))  # + N,D,C,DTT?
     return C
 
-def sum2G(Ft_, tt,c,rc, root=None, init=1, typ=2, fsub=1):  # updates root if not init
+def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=2, fsub=1):  # updates root if not init
 
     N_,ntt,nc = Ft_[0]; L_,ltt,lc = [],np.zeros((2,9)),0; B_,C_ = [],[]  # init tt,c s if B_
     if len(Ft_)>1: L_,ltt,lc = Ft_[1]  # in trace_edge
@@ -661,8 +671,8 @@ def sum2G(Ft_, tt,c,rc, root=None, init=1, typ=2, fsub=1):  # updates root if no
     G.rN_= sorted(G.rN_,key=lambda x: (x.m/x.c), reverse=True)  # only if lG?
     if fsub:
         if G.Lt.m * G.Lt.d * ((len(N_)-1)*Lw) > ave * avd * (rc+1) * cw:  # sub+ if Match * Variance
-            N_,L_,TTm,m,TTd,d = comp_N_(G.N_, rc+1)  # full | extented internal comp, skip compared?
-            V = m - ave*(rc+1)
+            # N_,L_,TTm,m,TTd,d = comp_N_(G.N_, rc+1)  # full | extented internal comp, skip compared?
+            V =G.m - ave*(rc+1)
             if mdecay(L_)> decay:
                 if V > ave*centw: cluster_C(G, N_, rc+1)  # divisive centroid clustering of same nodes
             elif V > ave * connw: cluster_N(G, N_, rc+1)  # divisive connect clustering with higher filter
