@@ -271,6 +271,10 @@ def comp_A(_A,A):
 def trans_comp(_N,N, rc, root):  # unpack node trees down to numericals and compare them
 
     for _F_,F_,nF_,nFt in zip((_N.N_,_N.B_,_N.C_),(N.N_,N.B_,N.C_), ('N_','B_','C_'),('Nt','Bt','Ct')):
+        if nF_ == 'N_':
+            if len(_N.Nt.N_)!= len(N.Nt.N_):  # make sure same level, only for N_?
+                min_level = min(len(_N.Nt.N_),len(N.Nt.N_))
+                _F_ = _N.Nt.N_[min_level-1]; F_ = N.Nt.N_[min_level-1]  # -1 to get min index from min level
         if _F_ and F_:  # eval?
             N_,dF_,TT,c,_,_ = comp_C_(_F_,rc, F_)  # callee comp_N may call deeper trans_comp, batch root_update?
             if dF_:  # match trans-links, !N_?
@@ -446,9 +450,9 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
     while True:
         C_,cnt,olp, mat, dif, DTT,Dm,Do = [],0,0,0,0,np.zeros((2,9)),0,eps; Ave = ave * (rc + nw)
         _Ct_ = [[c, c.m/c.c if c.m !=0 else eps, c.rc] for c in _C_]
-        for r, _C,_m,_o in enumerate(sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True)):
+        for r, (_C,_m,_o) in enumerate(sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True)):  # we need bracket to pack params when using enumerate with index
             if _m > Ave * _o:  # need _C index in N.m_?
-                C = cent_TT( sum2C(_C.N_,_C,i,len(_C.N_)),rc=r)  # C update lags behind N_; non-local C.rc += N.mo_ os?
+                C = cent_TT( sum2C(_C.N_,_C,None,len(_C.N_)),rc=r)  # C update lags behind N_; non-local C.rc += N.mo_ os?
                 _N_,_N__,m_,o_,M,D,O,comp,dTT,dm,do = [],[],[],[],0,0,0,0,np.zeros((2,9)),0,0  # per C
                 for n in _C._N_:  # core+ surround
                     if C in n.Ct.N_: continue
@@ -477,7 +481,7 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
             else: break  # the rest is weaker
         if Dm/Do > Ave:  # dval vs. dolp, overlap increases as Cs may expand in each loop
             _C_ = C_
-            for n in root.N_: n._C_=n.Ct.N_; n._m_=n.m_; n._o_=n.o_; n.Ct.N_,n.m,n.o_ = [],[],[]  # new n.Ct.N_s, combine with v_ in Ct_?
+            for n in root.N_: n._C_=n.Ct.N_; n._m_=n.m_; n._o_=n.o_; n.Ct.N_,n.m_,n.o_ = [],[],[]  # new n.Ct.N_s, combine with v_ in Ct_? (typo for m_)
             if Do > ave:
                 C_ = cluster_C_par(_C_,root.N_)  # swith to global inclusion eval by backprop if global overlap?
                 break
@@ -604,7 +608,18 @@ def add_N(G, N, coef=1):  # flat is currently not used
 def sum2C(N_,_C, i, Ln):  # fuzzy sum params used in base_comp
 
     c_, rc_, dTT_, baseT_, span_, yx_ = zip(*[(n.c, n.rc, n.dTT, n.baseT, n.span, n.yx) for n in N_])
-    icoef_ = [(N.m_[i] / (ave*N.o_[i])) * (_C.m / Ln) for N in N_]
+    # from cluster_C
+    if i == None:
+        icoef_ = []
+        for N in N_:
+            if _C in N.Ct.N_:
+                _i = N.Ct.N_.index(_C)
+                icoef_ += [(N.m_[_i] / (ave*N.o_[_i])) * (_C.m / Ln)]
+            else:
+                icoef_ += [1]  # when _C not in N>Ct.N_ (the first iteration, use 1 as coef?)
+    # from cluster_C_par
+    else:
+        icoef_ = [(N.m_[i] / (ave*N.o_[i])) * (_C.m / Ln) for N in N_]
     # N_incl *= C_val: pre-selection by likely survival, avoid post-prune eval?
     c_ = [c * max(ic, 0) for c,ic in zip(c_,icoef_)]
     tot = sum(c_)+eps; Par_ = []
