@@ -64,7 +64,7 @@ class CN(CBase):
         n.em, n.ed, n.ec = kwargs.get('em',0),kwargs.get('ed',0),kwargs.get('ec',0)  # sum dTT
         n.eTT = kwargs.get('eTT',np.zeros((2,9)))  # sum rim dTT
         n.rc  = kwargs.get('rc', 1)  # redundancy to ext Gs, ave in links?
-        n.N_, n.B_, n.C_, n.L_ = kwargs.get('N_',[]), kwargs.get('B_',[]), kwargs.get('C_',[]), kwargs.get('L_',[])  # base elements
+        # n.N_, n.B_, n.C_, n.L_ = kwargs.get('N_',[]), kwargs.get('B_',[]), kwargs.get('C_',[]), kwargs.get('L_',[])  # base elements
         n.Nt, n.Bt, n.Ct, n.Lt = kwargs.get('Nt',CF()), kwargs.get('Bt',CF()), kwargs.get('Ct',CF()), kwargs.get('Lt',CF())  # nested elements
         # Fork tuple: [N_,dTT,m,d,c,rc], Nt.N_ is H: [N_,dTT] per level, nest=len(N_)
         n.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,A: not ders, in links for simplicity, mostly redundant
@@ -81,6 +81,24 @@ class CN(CBase):
         n.rN_ = kwargs.get('rN_',[]) # reciprocal root nG_ for bG | cG, nG has Bt.N_,Ct.N_ instead
         n.compared = set()
         # ftree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
+    
+    @property
+    def N_(n):
+        return n.Nt.N_[-1].N_ if (n.Nt.N_ and isinstance(n.Nt.N_[0], CF)) else n.Nt.N_
+    
+    @property
+    def L_(n):
+        return n.Lt.N_[-1].N_ if (n.Lt.N_ and isinstance(n.Lt.N_[0], CF)) else n.Lt.N_
+    
+    @property
+    def B_(n):
+        return n.Bt.N_[-1].N_ if (n.Bt.N_ and isinstance(n.Bt.N_[0], CF)) else n.Bt.N_
+    
+    @property
+    def C_(n):
+        return n.Ct.N_[-1].N_ if (n.Ct.N_ and isinstance(n.Ct.N_[0], CF)) else n.Ct.N_
+    
+
     def __bool__(n): return bool(n.c)
 
 class CF(CBase):
@@ -318,7 +336,7 @@ def comp_C_(C_, rc,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s
                 if val_(L.dTT, rc+nw, wTTf,fi=0) < 0:  # merge similar but distant centroids, they are non-local
                     _c,c = L.nt
                     if _c is c or c in exc_: continue  # not yet merged
-                    for n in c.N_: add_N(_c,n); _c.N_ += [n]
+                    for n in c.N_: add_N(_c,n); _N_ = _C.N_; _N_ += [n]
                     for l in c.rim: l.nt = [_c if n is c else n for n in l.nt]
                     C_ += [_c]; exc_+=[c]
                     if c in C_: C_.remove(c)
@@ -463,7 +481,7 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
                 mat+=M; dif+=D; olp+=O; cnt+=comp  # from all comps?
                 DTT += dTT
                 if M > Ave * len(_N_) * O and val_(dTT, rc+O, TTw(C),(len(C.N_)-1)*Lw):
-                    for n,m,o in zip(_N_,m_,o_): n.m_+=[m]; n.o_+=[o]; n.Ct.N_+=[C]; C.Ct.N_+=[n]  # reciprocal root assign
+                    for n,m,o in zip(_N_,m_,o_): n.m_+=[m]; n.o_+=[o]; nC_ = n.C_; nC_ +=[C]; CC_ = C.C_; CC_+=[n]  # reciprocal root assign
                     C.dTT += dTT; C.c += comp; C.N_+=_N_; C._N_ = list(set(_N__))  # core, surround elements
                     C_ += [C]; Dm+=dm; Do+=do  # new incl or excl
                 else:
@@ -546,12 +564,12 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     for n in N_: n.m, n.d = vt_(n.dTT,rc)
     N = N_[0]
     if typ is None: typ = N.typ
-    G = Copy_(N,root,init=1,typ=typ); G.N_=N_; G.dTT=tt; G.c=c; G.rc=rc
+    G = Copy_(N,root,init=1,typ=typ); GN_= G.N_; GN_ += N_; G.dTT=tt; G.c=c; G.rc=rc
     nt = N.Nt; l0 = CF(N_=list(N.N_), dTT=deepcopy(nt.dTT), m=nt.m,d=nt.d,c=nt.c, root=G.Nt)
     G.Nt.N_ = [l0]+ [CopyF(lev,G.Nt) for lev in nt.N_]; G.Nt.dTT=deepcopy(N.dTT); G.Nt.m=N.m; G.Nt.d=N.d; G.Nt.c=N.c; G.Nt.root=G
     for N in N_[1:]: add_N(G,N)
     if L_:
-        G.L_=L_; m,d = vt_(ltt,rc); G.Lt = CF(dTT=ltt,m=m,d=d,c=lc,root=G)  # no Lt.N_ yet
+        GL_=G.L_; GL_+=L_; m,d = vt_(ltt,rc); G.Lt = CF(dTT=ltt,m=m,d=d,c=lc,root=G)  # no Lt.N_ yet
         A = np.sum([l.angl[0] for l in L_], axis=0)
         G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # angle dir = d sign
     if init:  # else same ext
@@ -583,7 +601,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     G.rN_= sorted(G.rN_, key=lambda x: (x.m/x.c), reverse=True)  # only if lG?
     return G
 
-def add_N(G, N, coef=1):  # flat is currently not used
+def add_N(G, N, coef=1):
 
     N.fin = 1; N.root = G
     _c,c = G.c,N.c*coef; C=_c+c  # weigh contribution of intensive params
@@ -710,10 +728,8 @@ def Copy_(N, root=None, init=0, typ=None):
     if typ is None: typ = 2 if init<2 else N.typ  # G.typ = 2, C.typ=3
     C = CN(dTT=deepcopy(N.dTT),typ=typ); C.root = N.root if root is None else root
     for attr in ['m','d','c','rc']: setattr(C,attr, getattr(N,attr))
-    if init: C.N_ = [N]
-    else:
-        if C.typ==N.typ: C.N_=list(N.N_); C.Nt = CopyF(N.Nt,root=C) if N.Nt else N.Nt
-        C.L_=list(N.L_); C.B_=list(N.B_); C.C_=list(N.C_)  # empty in init G
+
+    if not init and C.typ==N.typ: C.Nt = CopyF(N.Nt,root=C)
     if typ:
         for attr in ['fin','span','mang','sub','exe']: setattr(C,attr, getattr(N,attr))
         for attr in ['nt','baseT','box','rim','compared']: setattr(C,attr, copy(getattr(N,attr)))
@@ -861,6 +877,8 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
         A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
         PP = CN(typ=0, N_=P_,L_=L_,B_=B_,dTT=dTT,m=m,d=d,c=c, baseT=baseT,box=box,yx=yx,angl=A,span=np.hypot(dy/2,dx/2))  # set root in trace_edge
         PP.Nt = CF(dTT=deepcopy(dTT), m=m,d=d,c=c,rc=2, root=PP,nF='Nt')
+        PP.Lt = CF(N_=L_, m=m,d=d,c=c,rc=2, root=PP,nF='Lt')
+        PP.Bt = CF(N_=B_, rc=2, root=PP,nF='Bt')  # not sure on m and d
         for P in P_: P.root = PP
         if hasattr(P,'nt'):  # PPd, assign rN_:
             for dP in P_:
@@ -876,7 +894,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                 for nG in nG_:
                     if nG.B_: sum2T([B.root for B in nG.B_],2,nG,'Bt')
                 if val_(np.sum([n.dTT for n in nG_],0),3, TTw(tile), (len(PPm_)-1)*Lw) > 0:
-                    trace_edge(nG_,3, tile, tT)  # flatten, cluster B_-mediated Gs, init Nt
+                    G_, rc = trace_edge(nG_,3, tile, tT)  # flatten, cluster B_-mediated Gs, init Nt (we need to return G_)?
     if G_:
         root_replace(tile,1, *tT)  # updates tile.wTT
         if vt_(tile.dTT)[0] > ave:
@@ -887,7 +905,7 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
     L_, cT_, lTT, lc = [],set(),np.zeros((2,9)),0  # comp co-mediated Ns:
     for N in N_: N.fin = 0
     for N in N_:
-        _N_ = [rN for B in N.Bt.N_ for rN in B.rN_ if rN is not N] if N.Bt else []  # + node-mediated
+        _N_ = [rN for B in N.B_ for rN in B.rN_ if rN is not N]   # + node-mediated
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
