@@ -49,24 +49,34 @@ postfix _ denotes array of same-name elements, multiple _s is nested array
 capitalized vars are summed small-case vars
 '''
 eps = 1e-7
+
+def prop_F_(nF):  # factory function to set property+setter to get,update top-composition fork.N_
+    def Nf_(N):  # CN instance
+        Ft = getattr(N, nF)  # fork tuple Nt, Lt, etc
+        return Ft.N_[-1] if (Ft.N_ and isinstance(Ft.N_[0], CF)) else Ft
+    def get(N): return getattr(Nf_(N),'N_')
+    def set(N, new_N): setattr(Nf_(N),'N_', new_N)
+    return property(get, set)
+
 class CN(CBase):
     name = "node"
+    # n.Ft.N_[-1] if n.Ft.N_ and isinstance(n.Ft.N_[-1],CF) else n.Ft.N_:
+    N_, L_, B_, C_ = prop_F_('Nt'), prop_F_('Lt'), prop_F_('Bt'), prop_F_('Ct')
     def __init__(n, **kwargs):
         super().__init__()
         n.typ = kwargs.get('typ', 0)
         # 0=PP: block trans_comp, etc?
         # 1= L: typ,nt,dTT, m,d,c,rc, root,rng,yx,box,span,angl,fin,compared, N_,B_,C_,L_,Nt,Bt,Ct from comp_sub?
         # 2= G: + rim, eTT, em,ed,ec, baseT,mang,sub,exe, Lt, tNt, tBt, tCt?
-        # 3= C: + m_,o_,M,D,C, DTT?
+        # 3= C: base_comp subset, +m_,d_,r_,o_ in nodes?
         n.m,  n.d, n.c = kwargs.get('m',0), kwargs.get('d',0), kwargs.get('c',0)  # sum forks to borrow
         n.dTT = kwargs.get('dTT',np.zeros((2,9)))  # Nt+Lt dTT: m_,d_ [M,D,n, I,G,a, L,S,A]
         n.rim = kwargs.get('rim',[])  # external links, rng-nest?
         n.em, n.ed, n.ec = kwargs.get('em',0),kwargs.get('ed',0),kwargs.get('ec',0)  # sum dTT
         n.eTT = kwargs.get('eTT',np.zeros((2,9)))  # sum rim dTT
         n.rc  = kwargs.get('rc', 1)  # redundancy to ext Gs, ave in links?
-        # n.N_, n.B_, n.C_, n.L_ = kwargs.get('N_',[]), kwargs.get('B_',[]), kwargs.get('C_',[]), kwargs.get('L_',[])  # base elements
-        n.Nt, n.Bt, n.Ct, n.Lt = kwargs.get('Nt',CF()), kwargs.get('Bt',CF()), kwargs.get('Ct',CF()), kwargs.get('Lt',CF())  # nested elements
-        # Fork tuple: [N_,dTT,m,d,c,rc], Nt.N_ is H: [N_,dTT] per level, nest=len(N_)
+        n.Nt, n.Bt, n.Ct, n.Lt = (kwargs.get(fork,CF()) for fork in ('Nt','Bt','Ct','Lt'))
+        # Fork tuple: [N_,dTT,m,d,c,rc,nF,root], N_ may be H: [N_,dTT] per level, nest=len(N_)
         n.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,A: not ders, in links for simplicity, mostly redundant
         n.nt    = kwargs.get('nt', [])  # nodet, links only
         n.yx    = kwargs.get('yx', np.zeros(2))  # [(y+Y)/2,(x,X)/2], from nodet, then ave node yx
@@ -81,37 +91,18 @@ class CN(CBase):
         n.rN_ = kwargs.get('rN_',[]) # reciprocal root nG_ for bG | cG, nG has Bt.N_,Ct.N_ instead
         n.compared = set()
         # ftree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
-    
-    @property
-    def N_(n):
-        return n.Nt.N_[-1].N_ if (n.Nt.N_ and isinstance(n.Nt.N_[0], CF)) else n.Nt.N_
-    
-    @property
-    def L_(n):
-        return n.Lt.N_[-1].N_ if (n.Lt.N_ and isinstance(n.Lt.N_[0], CF)) else n.Lt.N_
-    
-    @property
-    def B_(n):
-        return n.Bt.N_[-1].N_ if (n.Bt.N_ and isinstance(n.Bt.N_[0], CF)) else n.Bt.N_
-    
-    @property
-    def C_(n):
-        return n.Ct.N_[-1].N_ if (n.Ct.N_ and isinstance(n.Ct.N_[0], CF)) else n.Ct.N_
-    
-
-    def __bool__(n): return bool(n.c)
 
 class CF(CBase):
     name = "fork"
     def __init__(f, **kwargs):
         super().__init__()
-        f.nF = kwargs.get('nF','')  # 'Nt','Lt','Bt','Ct'?
+        f.N_ = kwargs.get('N_',[])  # may be nested as H, empty in Lt
+        f.dTT= kwargs.get('dTT',np.zeros((2,9)))
         f.m  = kwargs.get('m', 0)
         f.d  = kwargs.get('d', 0)
         f.c  = kwargs.get('c', 0)
         f.rc = kwargs.get('rc', 0)
-        f.N_ = kwargs.get('N_',[])  # H in Nt, empty in Lt, N_ in forks and lev
-        f.dTT  = kwargs.get('dTT',np.zeros((2,9)))
+        f.nF = kwargs.get('nF','')  # 'Nt','Lt','Bt','Ct'?
         f.root = kwargs.get('root',None)
         # to use as root in cross_comp:
         f.L_, f.B_, f.C_ = kwargs.get('L_',[]),kwargs.get('B_',[]),kwargs.get('C_',[])
@@ -213,7 +204,7 @@ def comp_N_(iN_, rc, _iN_=[]):  # incremental-distance cross_comp, max dist depe
                     dpTT += pTT-dTT  # prediction error to fit code, not implemented
                 else:
                     pL = CN(typ=-1, nt=[_N,N], dTT=pTT,m=m,d=d,c=min(N.c,_N.c), rc=lrc, angl=np.array([dy_dx,1],dtype=object),span=dist)
-                    L_+= [pL]; N.rim+=[pL]; N_+=pL.nt; _N.rim+=[pL]; TTm+=pTT; cm+=pL.c  # same as links in clustering (pack L.nt as N_ here?)
+                    L_+= [pL]; N.rim+=[pL]; N_+=pL.nt; _N.rim+=[pL]; TTm+=pTT; cm+=pL.c  # same as links in clustering, pack L.nt as N_?
                 pVt_ += [[dist,dy_dx,_N,m]]  # for next rim eval
             else:
                 break  # beyond induction range
@@ -465,7 +456,7 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
         for r, (_C,_m,_o) in enumerate(sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True)):
             if _m > Ave *_o:  # need _C index in N.m_?
                 C = cent_TT( sum2C(_C.N_,_C,_Ci=None), rc=r)  # C update lags behind N_; C.rc += N.o_?
-                _N_,_N__,m_,o_,M,D,O,comp,dTT,dm,do = [],[],[],[],0,0,0,0,np.zeros((2,9)),0,0  # per C
+                _N_,_N__,m_,o_,M,D,O,comp, dTT,dm,do = [],[],[],[],0,0,0,0,np.zeros((2,9)),0,0  # per C
                 for n in _C._N_:  # core+ surround
                     if C in n.Ct.N_: continue
                     dtt,_ = base_comp(C,n); comp+=1  # add rim overlap to combined inclusion criterion?
@@ -481,7 +472,7 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
                 mat+=M; dif+=D; olp+=O; cnt+=comp  # from all comps?
                 DTT += dTT
                 if M > Ave * len(_N_) * O and val_(dTT, rc+O, TTw(C),(len(C.N_)-1)*Lw):
-                    for n,m,o in zip(_N_,m_,o_): n.m_+=[m]; n.o_+=[o]; nC_ = n.C_; nC_ +=[C]; CC_ = C.C_; CC_+=[n]  # reciprocal root assign
+                    for n,m,o in zip(_N_,m_,o_): n.m_+=[m]; n.o_+=[o]; n.Ct.N_= n.Ct.N_+[C]; C.Nt.N_= C.Nt.N_+[n]  # reciprocal root assign
                     C.dTT += dTT; C.c += comp; C.N_+=_N_; C._N_ = list(set(_N__))  # core, surround elements
                     C_ += [C]; Dm+=dm; Do+=do  # new incl or excl
                 else:
@@ -728,7 +719,6 @@ def Copy_(N, root=None, init=0, typ=None):
     if typ is None: typ = 2 if init<2 else N.typ  # G.typ = 2, C.typ=3
     C = CN(dTT=deepcopy(N.dTT),typ=typ); C.root = N.root if root is None else root
     for attr in ['m','d','c','rc']: setattr(C,attr, getattr(N,attr))
-
     if not init and C.typ==N.typ: C.Nt = CopyF(N.Nt,root=C)
     if typ:
         for attr in ['fin','span','mang','sub','exe']: setattr(C,attr, getattr(N,attr))
@@ -996,7 +986,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9))):  # a
         if Fg_:  # higher-scope sparse tile
             frame = sum2G([[Fg_, np.sum([fg.dTT for fg in Fg_],axis=0),sum([fg.c for fg in Fg_])]],1,frame,init=0)
             if Fg and cross_comp(Fg, rc=elev)[0]:  #| val_? spec->tN_,tC_,tL_
-                frame.N_ += [Fg]; elev += 1  # forward comped tile
+                frame.N_ = frame.N_+[Fg]; elev += 1  # forward comped tile
                 if max_elev == 4:  # seed, not from expand_lev
                     rV,wTTf = ffeedback(Fg)  # set filters
                     Fg = cent_TT(Fg,2)  # set Fg.dTT correlation weights
