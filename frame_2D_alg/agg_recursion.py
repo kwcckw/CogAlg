@@ -4,7 +4,7 @@ from math import atan2, cos, floor, pi  # from functools import reduce
 from itertools import zip_longest, combinations, chain, product  # from multiprocessing import Pool, Manager
 from frame_blobs import frame_blobs_root, imread, comp_pixel, CBase
 from slice_edge import slice_edge
-from comp_slice import comp_slice
+from comp_slice import comp_slice, w_t
 '''
 This is a main module of open-ended clustering algorithm, designed to discover empirical patterns of indefinite complexity. 
 Lower modules cross-comp and cluster image pixels and blob slices(Ps), the input here is resulting PPs: segments of matching Ps.
@@ -157,7 +157,6 @@ def cross_comp(root, rc, fL=0):  # core function mediating recursive rng+ and de
         for n in iN_: n.em, n.ed = vt_(np.sum([l.dTT for l in n.rim],axis=0), rc)
         cr = cd/ (c+cd) *.5  # dfork borrow ratio, .5 for one direction
         if val_(TT, rc+connw, TTw(root), (len(L_)-1)*Lw,1, TTd,cr) > 0 or fL:
-            root.L_ = L_
             sum2T(L_,rc,root,'Lt')  # new ders, root.B_,Bt if G
             E_ = get_exemplars({N for L in L_ for N in L.nt if N.em}, rc)  # exemplar N_| C_
             nG_,rc = cluster_N(root, E_,rc,fL)  # form Bt,Ct,
@@ -555,12 +554,13 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     for n in N_: n.m, n.d = vt_(n.dTT,rc)
     N = N_[0]
     if typ is None: typ = N.typ
-    G = Copy_(N,root,init=1,typ=typ); GN_= G.N_; GN_ += N_; G.dTT=tt; G.c=c; G.rc=rc
+    G = Copy_(N,root,init=1,typ=typ); G.dTT=tt; G.c=c; G.rc=rc
     nt = N.Nt; l0 = CF(N_=list(N.N_), dTT=deepcopy(nt.dTT), m=nt.m,d=nt.d,c=nt.c, root=G.Nt)
-    G.Nt.N_ = [l0]+ [CopyF(lev,G.Nt) for lev in nt.N_]; G.Nt.dTT=deepcopy(N.dTT); G.Nt.m=N.m; G.Nt.d=N.d; G.Nt.c=N.c; G.Nt.root=G
+    m,d=vt_(tt,rc); l1 =  CF(N_=N_, dTT=tt, m=m,d=d,c=c,rc=rc,root=G.Nt)
+    G.Nt.N_ = [l1, l0]+ [CopyF(lev,G.Nt) for lev in nt.N_]; G.Nt.dTT=deepcopy(N.dTT); G.Nt.m=N.m; G.Nt.d=N.d; G.Nt.c=N.c; G.Nt.root=G
     for N in N_[1:]: add_N(G,N)
     if L_:
-        GL_=G.L_; GL_+=L_; m,d = vt_(ltt,rc); G.Lt = CF(dTT=ltt,m=m,d=d,c=lc,root=G)  # no Lt.N_ yet
+        m,d = vt_(ltt,rc); G.Lt = CF(N_=L_,dTT=ltt,m=m,d=d,c=lc,root=G)  # no Lt.N_ yet
         A = np.sum([l.angl[0] for l in L_], axis=0)
         G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # angle dir = d sign
     if init:  # else same ext
@@ -599,8 +599,8 @@ def add_N(G, N, coef=1):
     if N.typ==3: G.rc = np.sum([o*coef for o in N.o_]); G.rN_+=N.rN_; G.m_+=N.m_; G.o_+=N.o_  # not sure
     if N.typ:  # not PP
         G.rN_ += N.rN_  # if N is link| cent?
-        l0 = G.Nt.N_[0]; l0.dTT+=N.dTT*coef; l0.c+=N.c*coef; l0.N_ += N.N_  # flatten in new lev
-        for Lev,lev in zip_longest(G.Nt.N_[1:], N.Nt.N_, fillvalue=None):
+        l0 = G.Nt.N_[1]; l0.dTT+=N.dTT*coef; l0.c+=N.c*coef; l0.N_ += N.N_  # flatten in new lev
+        for Lev,lev in zip_longest(G.Nt.N_[2:], N.Nt.N_, fillvalue=None):
             if lev:  # norm /C?
                 if Lev is None: G.Nt.N_ += [CopyF(lev, root=G.Nt)]
                 else: Lev.N_ += lev.N_; Lev.dTT+=lev.dTT*coef; Lev.c+=lev.c*coef  # flat
@@ -619,21 +619,27 @@ def add_N(G, N, coef=1):
 def sum2T(T_, rc, root, nF, TT=None, c=1, fset=1):  # N_ -> fork T
 
     T = T_[0]; T.rN_+=[root]; fV = TT is None
-    F = CF(root=root, nF=nF); T.root=F  # no L_,B_,C_,Nt,Bt,Ct yet
+    F = CF(N_=T_,root=root, nF=nF); T.root=F  # no L_,B_,C_,Nt,Bt,Ct yet
     if fV: F.dTT=copy(T.dTT); F.c=T.c
     else:  F.dTT=TT; F.c=c
-    if nF=='Nt': F.N_ = ([T.N_] + list(T.Nt.N_)) if T.N_ else []  # deeper H
+    if nF=='Nt':
+        l1 = F; F = CF(m=F.m,d=F.d,rc=F.rc,dTT=F.dTT,root=root,nF=nF); l1.root = F; F.N_ = [l1]  # top level
+        if isinstance(T.Nt.N_[0], CF): F.N_ += [T.Nt.N_]  # add deeper levels, including l0
+        else:                          F.N_ += [CopyF(T.Nt)]   # T.Nt.N_ is single level, add l0 only
     for T in T_[1:]:
         T.root = F; T.rN_ += [root]  # reciprocal N per overlapped B|C
         if fV: F.dTT += T.dTT; F.c += T.c
         if nF=='Nt' and F.N_:  # N_=H
-            F.N_[0] += T.N_  # top level is flattened T.N_, in Nt only?
-            for Lev,lev in zip_longest(F.N_[1:], T.Nt.N_):  # deeper levels
-                if lev:
-                    if Lev: Lev.N_+=lev.N_; Lev.dTT+=lev.dTT; Lev.c+=lev.c
-                    else:   F.N_ += [CopyF(lev, root=F)]
+            F.N_[1] += T.N_  # top level is flattened T.N_, in Nt only?
+            if isinstance(T.Nt.N_[0], CF):  # this should be optional now?
+                for Lev,lev in zip_longest(F.N_[2:], T.Nt.N_[1:]):  # deeper levels
+                    if lev:
+                        if Lev: Lev.N_+=lev.N_; Lev.dTT+=lev.dTT; Lev.c+=lev.c
+                        else:   F.N_ += [CopyF(lev, root=F)]
     F.m, F.d = vt_(F.dTT,rc); F.rc = rc
-    if fset: setattr(root,nF, F)
+    if fset: 
+        # now we should check if root has existing Ft.N_ levels, and combine their levels?
+        setattr(root,nF, F)
     if nF=='Nt' and F.N_:
         n_ = F.N_[0]; dtt = sum([n.dTT for n in n_]); m,d = vt_(dtt,rc); F.N_[0] = CF(N_=n_,dTT=dtt,m=m,d=d, c=sum([n.c for n in n_]))
     else: F.N_ = list(T_)
@@ -866,9 +872,15 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
         y,x,Y,X = box; dy,dx = Y+1-y, X+1-x
         A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
         PP = CN(typ=0, N_=P_,L_=L_,B_=B_,dTT=dTT,m=m,d=d,c=c, baseT=baseT,box=box,yx=yx,angl=A,span=np.hypot(dy/2,dx/2))  # set root in trace_edge
-        PP.Nt = CF(dTT=deepcopy(dTT), m=m,d=d,c=c,rc=2, root=PP,nF='Nt')
+        PP.Nt = CF(dTT=deepcopy(dTT), m=m,d=d,c=c,rc=2, root=PP,nF='Nt')  # empty since N_ can't pack CP or CdP?
         PP.Lt = CF(N_=L_, m=m,d=d,c=c,rc=2, root=PP,nF='Lt')
-        PP.Bt = CF(N_=B_, rc=2, root=PP,nF='Bt')  # not sure on m and d
+        
+        # follow the steps in vt_
+        m_, d_, rc = np.zeros(6), np.zeros(6), 2
+        for B in B_: m_ += B.verT[0]; d_ += B.verT[1];
+        ad_ = np.abs(d_); t_ = m_ + ad_ + eps  # ~ max comparand
+        m = m_/t_ @ w_t[0] - ave*rc; d = ad_/t_ @ w_t[1] - avd*rc
+        PP.Bt = CF(N_=B_, m=m, d=d, rc=2, root=PP,nF='Bt')  
         for P in P_: P.root = PP
         if hasattr(P,'nt'):  # PPd, assign rN_:
             for dP in P_:
