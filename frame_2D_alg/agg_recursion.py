@@ -53,7 +53,7 @@ eps = 1e-7
 def prop_F_(F):  # factory function to set property+setter to get,update top-composition fork.N_
     def Nf_(N):  # CN instance
         Ft = getattr(N, F)  # Nt| Lt| Bt| Ct
-        return Ft.N_[-1] if (Ft.N_ and isinstance(Ft.N_[0], CF)) else Ft
+        return Ft.N_[0] if (Ft.N_ and isinstance(Ft.N_[0], CF)) else Ft  # should be 0 for top level here
     def get(N): return getattr(Nf_(N),'N_')
     def set(N, new_N): setattr(Nf_(N),'N_',new_N)
     return property(get,set)
@@ -94,7 +94,7 @@ class CN(CBase):
 
 class CF(CBase):
     name = "fork"
-    N_, L_, B_, C_ = prop_F_('Nt'), prop_F_('Lt'), prop_F_('Bt'), prop_F_('Ct')
+    # N_, L_, B_, C_ = prop_F_('Nt'), prop_F_('Lt'), prop_F_('Bt'), prop_F_('Ct')
     def __init__(f, **kwargs):
         super().__init__()
         f.N_ = kwargs.get('N_',[])  # may be nested as H, empty in Lt
@@ -106,7 +106,7 @@ class CF(CBase):
         f.nF = kwargs.get('nF','')  # 'Nt','Lt','Bt','Ct'?
         f.root = kwargs.get('root',None)
         # assigned by sum2T in cross_comp:
-        f.Nt, f.Bt, f.Ct, f.Lt = (kwargs.get(fork,CF()) for fork in ('Nt','Bt','Ct','Lt'))
+        # f.Nt, f.Bt, f.Ct, f.Lt = (kwargs.get(fork,CF()) for fork in ('Nt','Bt','Ct','Lt'))
     def __bool__(f): return bool(f.c)
 
 ave = .3; avd = ave*.5  # ave m,d / unit dist, top of filter specification hierarchy
@@ -156,7 +156,7 @@ def cross_comp(root, rc, fL=0):  # core function mediating recursive rng+ and de
         for n in iN_: n.em, n.ed = vt_(np.sum([l.dTT for l in n.rim],axis=0), rc)
         cr = cd/ (c+cd) *.5  # dfork borrow ratio, .5 for one direction
         if val_(TT, rc+connw, TTw(root), (len(L_)-1)*Lw,1, TTd,cr) > 0 or fL:
-            sum2F(L_,'Lt',root)  # new ders, root.B_,Bt if G
+            sum2F(L_,'Lt',root)  # new ders, root.B_,Bt if G (special case for L_ because their N_ may empty, so prior levels will be removed)
             E_ = get_exemplars({N for L in L_ for N in L.nt if N.em}, rc)  # exemplar N_| C_
             nG_,rc = cluster_N(root, E_,rc,fL)  # form Bt,Ct,
             # 3-fork sub+ in sum2G
@@ -580,10 +580,10 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
 
 def sum2F(F_, nF, root, TT=None, C=0, fset=1):
 
-    if not C: C = sum([n.c for n in F_]); TT = np.sum([n.dTT for n in F_])  # no *= cr?
+    if not C: C = sum([n.c for n in F_]); TT = np.sum([n.dTT for n in F_],axis=0)  # no *= cr?
     m, d = vt_(TT)
     Ft = CF(nF=nF, c=C, dTT=TT, m=m, d=d, root=root)
-    F = F_[0]; H = isinstance(F_.N_[0],CF); cr=F.c/C
+    F = F_[0]; H = any(F.N_) and isinstance(F.N_[0],CF); cr=F.c/C  # PP.N_ is empty
     if H: NH = [CopyT(lev,Ft,cr*(lev.c/F.c)) for lev in F.N_]  # else n__:
     else: n__= F.N_[:]; tt = F.eTT*cr; c = F.ec  # sum from F.rim or same as TT,C?
     for F in F_[1:]:
@@ -675,10 +675,11 @@ def root_replace(root, rc, G_, N_,L_,Lt_,TT,nTT,lTT,C,nc,lc):
     if hasattr(root,'wTT'): cent_TT(root, root.rc)
     sum2F(G_,'Nt',root, nTT,nc)
     sum2F(L_,'Lt',root, lTT,lc)
-    lTT, lc = np.zeros((2,9)), 0  # reset for top nested lev
-    for Lt in Lt_: lTT+=Lt.dTT; lc+=Lt.c
-    m,d = vt_(lTT,rc)
-    root.Nt.N_.insert(0, CF(N_=N_,dTT=lTT,m=m,d=d,c=lc, root=root))  # top nested level
+    # below is redundant now and should be removed since it's add as Nt.N_[0] in sum2F
+    # lTT, lc = np.zeros((2,9)), 0  # reset for top nested lev
+    # for Lt in Lt_: lTT+=Lt.dTT; lc+=Lt.c
+    # m,d = vt_(lTT,rc)
+    # root.Nt.N_.insert(0, CF(N_=N_,dTT=lTT,m=m,d=d,c=lc, root=root))  # top nested level 
 
 def CopyT(F, root=None, cr=1):  # F = CF|CN
 
@@ -926,7 +927,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9))):  # a
     def base_tile(y,x):  # 1st level, higher levels get Fg s
         Fg = frame_blobs_root( comp_pixel( image[y:y+Ly, x:x+Lx]), rV)
         Fg = vect_edge(Fg, rV)  # form, trace PP_
-        if Fg: Fg.L_=[]; cross_comp(Fg, rc=Fg.rc)
+        if Fg: cross_comp(Fg, rc=Fg.rc)  # the L_ reset is not needed now
         return Fg
 
     def expand_lev(_iy,_ix, elev, Fg):  # seed tile is pixels in 1st lev, or Fg in higher levs
