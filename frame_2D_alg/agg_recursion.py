@@ -50,9 +50,9 @@ capitalized vars are summed small-case vars
 '''
 eps = 1e-7
 
-def prop_F_(nF):  # factory function to set property+setter to get,update top-composition fork.N_
+def prop_F_(F):  # factory function to set property+setter to get,update top-composition fork.N_
     def Nf_(N):  # CN instance
-        Ft = getattr(N, nF)  # fork tuple Nt, Lt, etc
+        Ft = getattr(N, F)  # Nt| Lt| Bt| Ct
         return Ft.N_[-1] if (Ft.N_ and isinstance(Ft.N_[0], CF)) else Ft
     def get(N): return getattr(Nf_(N),'N_')
     def set(N, new_N): setattr(Nf_(N),'N_',new_N)
@@ -94,6 +94,7 @@ class CN(CBase):
 
 class CF(CBase):
     name = "fork"
+    N_, L_, B_, C_ = prop_F_('Nt'), prop_F_('Lt'), prop_F_('Bt'), prop_F_('Ct')
     def __init__(f, **kwargs):
         super().__init__()
         f.N_ = kwargs.get('N_',[])  # may be nested as H, empty in Lt
@@ -104,10 +105,8 @@ class CF(CBase):
         f.rc = kwargs.get('rc', 0)
         f.nF = kwargs.get('nF','')  # 'Nt','Lt','Bt','Ct'?
         f.root = kwargs.get('root',None)
-        # to use as root in cross_comp:
-        f.L_, f.B_, f.C_ = kwargs.get('L_',[]),kwargs.get('B_',[]),kwargs.get('C_',[])
         # assigned by sum2T in cross_comp:
-        f.Nt, f.Bt, f.Ct = kwargs.get('Nt',[]),kwargs.get('Bt',[]),kwargs.get('Ct',[])
+        f.Nt, f.Bt, f.Ct, f.Lt = (kwargs.get(fork,CF()) for fork in ('Nt','Bt','Ct','Lt'))
     def __bool__(f): return bool(f.c)
 
 ave = .3; avd = ave*.5  # ave m,d / unit dist, top of filter specification hierarchy
@@ -540,16 +539,14 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
         nc+=root.Nt.c; lc+=root.Lt.c; bc+=root.Bt.c; cc+=root.Ct.c
         ntt+=root.Nt.dTT; ltt+=root.Lt.dTT; btt+=root.Bt.dTT; ctt+=root.Ct.dTT
         # batch root_updates: n.dTT += update_dTT_?
-    for n in N_: n.m, n.d = vt_(n.dTT,rc)
     N = N_[0]
     if typ is None: typ = N.typ
-    G = Copy_(N,root,init=1,typ=typ); G.dTT=tt; G.c=c; G.rc=rc
-    G.Nt = sum2F(N_,'Nt',G, coef=1)
-    m,d = vt_(tt,rc)
-    G.Nt.N_ = [CF(N_=N_,dTT=tt, m=m,d=d,c=c, root=G.Nt)] + G.Nt.N_
-    for N in N_[1:]: add_N(G,N, coef=1)
+    m, d = vt_(tt, rc)
+    G = Copy_(N,root,init=1,typ=typ); G.dTT=tt; G.m=m; G.d=d; G.c=c; G.rc=rc
+    G.Nt = sum2F(N_,'Nt',G, ntt, nc)
+    for N in N_[1:]: add_N(G,N, coef=N.c/c)  # sum not-CF vars only?
     if L_:
-        m,d = vt_(ltt,rc); G.Lt = CF(N_=L_,dTT=ltt,m=m,d=d,c=lc,root=G)  # no Lt.N_ yet
+        G.Lt = sum2F(L_,'Lt',G, ltt,lc)
         A = np.sum([l.angl[0] for l in L_], axis=0)
         G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # angle dir = d sign
     if init:  # else same ext
@@ -581,44 +578,31 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     G.rN_= sorted(G.rN_, key=lambda x: (x.m/x.c), reverse=True)  # only if lG?
     return G
 
-def sum2F(N_, nF, root, coef=1, TT=None, c=1, fset=1):
-    N  = N_[0]
-    Ft = CopyT(N, root); Ft.nF = nF; Flev = 0
-    if TT is not None: Ft.dTT = TT; Ft.c = c
-    if N.Nt.N_ and isinstance(N.Nt.N_[0], CN): Flev = 1
-    if Flev: 
-        lev = CF(root = Ft)
-        for N in Ft.N_: lev.N_ += [N]; lev.dTT += N.dTT; lev.c += N.c
-        Ft.N_ = [lev]  # nest if flat (this nest should be CF?)
-    else:    Ft.N_ += [N]     # for PP, pack PP as Ft.N_
-    for N in N_[1:]: 
-        if Flev: add2F(Ft, nF, N, coef)
-        else:     Ft.N_ += [N]
+def sum2F(F_, nF, root, TT=None, C=0, fset=1):
+
+    if not C: C = sum([n.c for n in F_]); TT = np.sum([n.dTT for n in F_])  # no *= cr?
+    m, d = vt_(TT)
+    Ft = CF(nF=nF, c=C, dTT=TT, m=m, d=d, root=root)
+    F = F_[0]; H = isinstance(F_.N_[0],CF); cr=F.c/C
+    if H: NH = [CopyT(lev,Ft,cr*(lev.c/F.c)) for lev in F.N_]  # else n__:
+    else: n__= F.N_[:]; tt = F.eTT*cr; c = F.ec  # sum from F.rim or same as TT,C?
+    for F in F_[1:]:
+        cr = F.c/C
+        if H:
+            for Lev, lev in zip_longest(F.N_,NH, fillvalue=None):  # G.Nt.N_=H, top-down
+                if lev:
+                    if Lev is None: Ft.N_ += [CopyT(lev,Ft,cr)]
+                    else: Lev.N_ += lev.N_; Lev.dTT += lev.dTT*cr*(lev.c/F.c); Lev.c += lev.c
+        else:
+            for N in F.N_: n__+= N.N_; tt+= N.dTT*cr; c+=N.c
+            # concat N_s
+    Ft.N_ = NH if H else [CF(N_= list(set(n__)), dTT=tt,m=m,d=d,c=C,root=root)]  # nest if flat?
+    Ft.N_.insert(0, CF(N_=F_,dTT=TT, m=m,d=d,c=C,root=root))  # new top lev
     if fset:
-        _N_ = getattr(root, nF).N_; _lev_ = []
-        if _N_:
-            if isinstance(_N_[0], CF): _lev_ = _N_  # if existing root.Ft.N_ is levels
-            elif isinstance(_N_[0], CN):            # if existing root.Ft.N_ is flat, add nesting
-                _lev = CF(root=Ft)
-                for _N in _N_: _lev.N_ += [_N]; _lev.dTT += _N.dTT; _lev.c += _N.c
-                _lev_ = [_lev]
-            if _lev_ and isinstance(Ft.N_[0], CN):  # if root.Ft.N_ is level, but Ft.N_ is flat, add nesting to Ft.N_
-                lev = CF(root=Ft)
-                for N in Ft.N_: lev.N_ += [N]; lev.dTT += N.dTT; lev.c += N.c
-                Ft.N_ = [lev]  # convert from flat to levels
-            Ft.N_ += _lev_  # merge top levels with existing levels
-        setattr(root, nF, Ft)
-    root_update(root, Ft)
+        setattr(root, nF, Ft); root_update(root, Ft)
     return Ft
 
-def add2F(Ft, nF, N, coef):  # unpack in sum2F?
-    NH = N.Nt.N_ if isinstance(N.Nt.N_[0],CF) else [N.Nt.N_]  # nest if flat, replace Nt with Ft=nF?
-    for Lev,lev in zip_longest(Ft.N_, NH, fillvalue=None):  # G.Nt.N_=H, top-down
-        if lev:
-            if Lev is None: Ft.N_ += [CopyT(lev, root=Ft)]
-            else: Lev.N_ += lev.N_; Lev.dTT+=lev.dTT*coef; Lev.c+=lev.c*coef
-
-def add_N(G, N, coef=1):
+def add_N(G, N, coef=1):  # sum not-CF vars only?
 
     N.fin = 1; N.root = G
     _c,c = G.c,N.c*coef; C=_c+c  # weigh contribution of intensive params
@@ -634,7 +618,6 @@ def add_N(G, N, coef=1):
         G.box = extend_box(G.box, N.box)
     # if N is Fg: margin = Ns of proj max comp dist > min _Fg point dist: cross_comp Fg_?
     return N
-
 
 def cent_TT(C, rc, init=0):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
@@ -690,27 +673,22 @@ def root_replace(root, rc, G_, N_,L_,Lt_,TT,nTT,lTT,C,nc,lc):
     root.dTT=TT; root.c=C
     root.rc = rc  # not sure
     if hasattr(root,'wTT'): cent_TT(root, root.rc)
-    sum2F(L_,'Lt', root,1,lTT,lc)
-    lTT,lc = np.zeros((2,9)),0  # reset for top nested lev
+    sum2F(G_,'Nt',root, nTT,nc)
+    sum2F(L_,'Lt',root, lTT,lc)
+    lTT, lc = np.zeros((2,9)), 0  # reset for top nested lev
     for Lt in Lt_: lTT+=Lt.dTT; lc+=Lt.c
     m,d = vt_(lTT,rc)
-    _lev_ = []  # existing levels
-    if root.Nt.N_:
-        if isinstance(root.Nt.N_[0], CF):   _lev_   = root.Nt.N_[:]  # existing levels
-        elif isinstance(root.Nt.N_[0], CN): _lev_ = sum2F(root.Nt.N_,'Nt',root,1,fset=0)  # create level from Ns                       
-    l0 = CF(N_=N_,dTT=lTT,m=m,d=d,c=lc, root=root)  # l0
-    l1 = sum2F(G_,'Nt', root,1,nTT,nc,fset=0)       # l1 (top)
-    root.Nt.N_ = [l1, l0] + _lev_
+    root.Nt.N_.insert(0, CF(N_=N_,dTT=lTT,m=m,d=d,c=lc, root=root))  # top nested level
 
-def CopyT(F, root=None):  # this is copy CN's params to a new CF?
+def CopyT(F, root=None, cr=1):  # F = CF|CN
 
-    C = CF(dTT=deepcopy(F.dTT)); C.root = root or F.root
-    for a in ['m','d','c','rc']: setattr(C,a, getattr(F,a))
-    for a in ['L_','B_','C_']: setattr(C,a, copy(getattr(F,a)))
-    [setattr(C,a,CopyT(p,root=C)) for a in ['Nt','Bt','Ct'] if (p:=getattr(F,a))]
-    if F.N_:
-        if F.nF=='Nt': C.N_ = [CopyT(lev) for lev in F.N_]  # H levs are concat
-        else:          C.N_ = copy(F.N_)  # alt roots
+    C = CF(dTT = F.dTT*cr, root = root or F.root)
+    for nA in ['m','d','c','rc']: setattr(C,nA, getattr(F,nA))
+    for nF in ['Nt','Bt','Ct']:
+        if sub_F:=getattr(F,nF):
+            if isinstance(sub_F.N_[0],CF):
+                C.N_ = [CopyT(lev,cr) for lev in F.N_]  # H
+            else: C.N_ = copy(F.N_)  # flat
     return C
 
 def Copy_(N, root=None, init=0, typ=None):
