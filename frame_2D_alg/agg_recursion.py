@@ -429,15 +429,18 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
     for E in E_:
         C = cent_TT( Copy_(E, root, init=2,typ=3), rc, init=1)  # all rims are within root, sequence along max w attr?
         C._N_ = [n for l in E.rim for n in l.nt if n is not E]  # core members + surround -> comp_C
-        for n in C._N_:  # exemplar rims shouldn't overlap?
-            n.m_=[C.m]; n._m_=[C.m]; n.o_=[1]; n._o_=[1]; n.Ct.N_=[C]; n._C_=[C]
+        for n in C._N_:  # exemplar rims shouldn't overlap? (they actually overlapped in C now)
+            n.m_= getattr(n, 'm_', []) + [C.m]; n._m_= getattr(n, '_m_', []) + [C.m] 
+            n.o_= getattr(n, 'o_', []) + [1]; n._o_= getattr(n, '_o_', []) + [1]
+            n.Ct.N_ += [C]; n._C_= getattr(n, '_C_', []) + [C]
         _C_ += [C]    # reform C_, refine N_s:
     while True:
-        C_,cnt,olp, mat,dif, DTT,Dm,Do = [],0,0,0,0,np.zeros((2,9)),0,eps,0; Ave = ave * (rc+nw)
+        C_,cnt,olp, mat,dif, DTT,Dm,Do = [],0,0,0,0,np.zeros((2,9)),0,eps; Ave = ave * (rc+nw)
         _Ct_ = [[c, c.m/c.c if c.m !=0 else eps, c.rc] for c in _C_]
         for r, (_C,_m,_o) in enumerate(sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True)):
             if _m > Ave *_o:  # need _C index in N.m_?
-                C = cent_TT( sum2C(_C.N_,_C,_Ci=None), rc=r)  # C update lags behind N_; C.rc += N.o_?
+                # should be C._N_ here?
+                C = cent_TT( sum2C(_C._N_,_C,_Ci=None), rc=r)  # C update lags behind N_; C.rc += N.o_?
                 _N_,_N__,m_,o_,M,D,O,comp, dTT,dm,do = [],[],[],[],0,0,0,0,np.zeros((2,9)),0,0  # per C
                 for n in _C._N_:  # core+ surround
                     if C in n.Ct.N_: continue
@@ -472,13 +475,14 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
             _C_ = C_
             for n in root.N_: n._C_=n.Ct.N_; n._m_=n.m_; n._o_=n.o_; n.Ct.N_,n.m_,n.o_ = [],[],[]  # new n.Ct.N_s, combine with v_ in Ct_?
         else: break  # converged
-    C_ = [C for C in C_ if val_(C.DTT, rc, TTw(C))]  # prune C_
+    C_ = [C for C in C_ if val_(C.dTT, rc, TTw(C))]  # prune C_
     if C_:
         for n in [N for C in C_ for N in C.N_]:
-            n.exe = (n.D if n.typ==1 else n.M) + np.sum([mo[0]-ave*mo[1] for mo in n.mo_]) - ave
+            n.exe = (n.d if n.typ==1 else n.m) + np.sum([m-ave*o for m, o in zip(n.m_, n.o_)]) - ave
             # exemplar V + sum n match_dev to Cs, m * ||C rvals?
         if val_(DTT, rc+olp, TTw(root), (len(C_)-1)*Lw) > 0:
             Ct = sum2F(C_,'Ct',root)
+            Ct = CopyT(Ct,fCon=1)
             Ct.tNt,Ct.tBt,Ct.tCt = CF(),CF(),CF()
             _,rc = cross_comp(Ct, rc)  # all distant Cs, re-order C_ along argmax(root.wTT): eigenvector?
             root.C_=C_; root.Ct=Ct; root_update(root,Ct)
@@ -515,15 +519,16 @@ def sum2C(N_,_C, _Ci=None):  # fuzzy sum params used in base_comp
     c_,rc_,dTT_,baseT_,span_,yx_ = zip(*[(n.c, n.rc, n.dTT, n.baseT, n.span, n.yx) for n in N_])
     ccoef_ = []
     for N in N_:  # N_incl *= C_val: pre-selection by likely survival, to avoid post-prune eval:
-        if _Ci == None: _Ci = N.Ct.N_.index(_C)
-        ccoef_ += [N.m_[_Ci] / (ave* N.o_[_Ci]) * _C.m]
+        Ci = N.Ct.N_.index(_C) if _Ci is None else _Ci  # we need another Ci, else the next loop is using prior _Ci
+        ccoef_ += [N.m_[Ci] / (ave* N.o_[Ci]) * _C.m]
     c_ = [c * max(cc, 0) for c,cc in zip(c_,ccoef_)]
     tot = sum(c_)+eps; Par_ = []
     for par_ in rc_, dTT_, baseT_, span_, yx_:
         Par_.append(sum([p * c for p,c in zip(par_,c_)]))
-    C = CN(N_=N_, c=tot, typ=3)
+    C = CN(c=tot, typ=3)
     C.rc, C.dTT, C.baseT, C.span, C.yx = [P / tot for P in Par_]
     C.m, C.d = vt_(C.dTT, C.rc)
+    C.Nt = CF(N_=N_, m=C.m, d=C.d, dTT=deepcopy(C.dTT),c=C.c)  # we need to add N_ to C here
     return cent_TT(C, C.rc)
 
 def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if not init
@@ -583,7 +588,7 @@ def sum2F(F_, nF, root, TT=None, C=0, fset=1):
         C = sum([n.c for n in F_]); TT = np.sum([n.dTT for n in F_],axis=0)  # *= cr?
     m, d = vt_(TT)
     Ft = CF(nF=nF, dTT=TT, m=m,d=d,c=C, root=root); F = F_[0]
-    if F.typ:  # else PP, no N_
+    if F.N_:  # else PP or L with empty N_, no N_
         NH, L1 = [], CF(nF=nF,root=Ft)  # init both, fill one
         for F in F_:
             cr = F.c / C
@@ -601,6 +606,7 @@ def sum2F(F_, nF, root, TT=None, C=0, fset=1):
             if L1: add_F(NH[0], L1, cr=1)  # same rc?
         else: NH = [L1]
         Ft.N_ = [CF(N_=F_,dTT=TT, m=m,d=d,c=C,root=root)] + NH  # new top lev
+    else: Ft.N_ = F_  # we still need to pack F_
     if fset:
         setattr(root, nF, Ft); root_update(root, Ft)
     return Ft
@@ -678,15 +684,24 @@ def root_replace(root, rc, TT,C, N_,nTT,nc,L_,lTT,lc):
     sum2F(N_,'Nt',root, nTT,nc)
     sum2F(L_,'Lt',root, lTT,lc)
 
-def CopyT(F, root=None, cr=1):  # F = CF|CN
+def CopyT(F, root=None, cr=1, fCon=0):  # F = CF|CN
 
-    C = CF(dTT = F.dTT*cr, root = root or F.root)
+    inst = CN if fCon else CF
+    C = inst(dTT = F.dTT*cr, root = root or F.root)
     for nA in ['m','d','c','rc']: setattr(C,nA, getattr(F,nA))
-    for nF in ['Nt','Bt','Ct']:
-        if sub_F:=getattr(F,nF):
-            if isinstance(sub_F.N_[0],CF):
-                C.N_ = [CopyT(lev,cr) for lev in F.N_]  # H
-            else: C.N_ = copy(F.N_)  # flat
+    for F_, nF in zip(['N_','B_','C_','L_'], ['Nt','Bt','Ct','Lt']):
+        if sub_F_:=getattr(F,F_,[]):
+            if fCon:  # conversion
+                Ft = getattr(C, nF) 
+                if sub_F_ and isinstance(sub_F_[0],CF):
+                    Ft.N_ = [CopyT(lev,cr) for lev in sub_F_]  # H
+                else: Ft.N_ = F_  # flat
+            else:  # normal CF
+                N_ = getattr(C, F_)
+                if sub_F_ and isinstance(sub_F_[0], CF):
+                    N_[:] = [CopyT(lev, cr) for lev in sub_F_]  # H
+                else:  N_[:] = copy(sub_F_)  # flat
+
     return C
 
 def Copy_(N, root=None, init=0, typ=None):
