@@ -426,11 +426,12 @@ def cluster_N(root, _N_, rc, fL=0):  # flood-fill node | link clusters, flat, re
 def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround via rims of new member nodes, within root
 
     C_, _C_ = [],[]  # form root.Ct, may call cross_comp-> cluster_N, incr rc
-    for n in root.N_: n._C_,n.n_,n._n_,n.o_,n._o_ = [],[],[],[],[]
+    for n in root.N_: n._C_,n.m_,n._m_,n.o_,n._o_ = [],[],[],[],[]
     for E in E_:
         C = cent_TT( Copy_(E, root, init=2,typ=3), rc, init=1)  # all rims are within root, sequence along max w attr?
-        C._N_ = [n for l in E.rim for n in l.nt if n is not E]  # core members + surround -> comp_C
-        for n in C._N_: n.m_=[C.m]; n._m_=[C.m]; n.o_=[1]; n._o_=[1]; n.Ct.N_=[C]; n._C_=[C]
+        # there should be duplicated Ns if we add from l.nt
+        C._N_ = list(set([n for l in E.rim for n in l.nt if (n is not E and n in root.N_ and n is not E)]))  # core members + surround -> comp_C  (skip other G's N_ and E?)
+        for n in C._N_: n.m_+=[C.m]; n._m_+=[C.m]; n.o_+=[1]; n._o_+=[1]; n.Ct.N_+=[C]; n._C_+=[C]  # use append instead of init to for overlapping ns
         _C_ += [C]    # reform C_, refine N_s:
     while True:
         C_,cnt,olp, mat,dif, DTT,Dm,Do = [],0,0,0,0,np.zeros((2,9)),0,eps; Ave = ave * (rc+nw)
@@ -455,7 +456,7 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
                 DTT += dTT
                 if M > Ave * len(_N_) * O and val_(dTT, rc+O, TTw(C),(len(C.N_)-1)*Lw):
                     for n,m,o in zip(_N_,m_,o_):
-                        n.m_+=[m]; n.o_+=[o]; n.Ct.N_= n.Ct.N_+[C]; C.Nt.N_= C.Nt.N_+[n]  # reciprocal root assign
+                        n.m_+=[m]; n.o_+=[o]; n.Ct.N_+= [C]; C.Nt.N_+= [n]  # reciprocal root assign
                     C.dTT += dTT; C.c += comp; C.N_+=_N_; C._N_ = list(set(_N__))  # core, frontier elements
                     C_ += [C]; Dm+=dm; Do+=do  # new incl or excl
                 else:
@@ -495,9 +496,9 @@ def cluster_P(_C_,N_, rc):  # Parallel centroid refining, _C_ from cluster_C, N_
     _M = M = 0  # _D,D,D_: C distinctiveness?
     while True:
         for N in N_:
-            N.m_,N.d_,N.r_ = map(list,zip(*[vt_(base_comp(C,N)[0]) + (C.rc,) for C in _C_]))  # distance-weight match?
-            N.o_ = np.argsort(np.argsort(N.m_)[::-1]) + 1  # rank of each C_[i] = rdn of C in C_
-            M += sum(N.m_)
+            N._m_,N._d_,N._r_ = map(list,zip(*[vt_(base_comp(C,N)[0]) + (C.rc,) for C in _C_]))  # distance-weight match?
+            N._o_ = np.argsort(np.argsort(N._m_)[::-1]) + 1  # rank of each C_[i] = rdn of C in C_
+            M += sum(N._m_)
         C_ = []
         for i, _C in enumerate(_C_):
             C_ += [sum2C(N_,_C, i)]  # update with new icoefs,_C.m
@@ -506,10 +507,11 @@ def cluster_P(_C_,N_, rc):  # Parallel centroid refining, _C_ from cluster_C, N_
         else: break  # convergence
     _C_,i_ = [], []
     for i, C in enumerate(C_):
-        if C.m > ave*C.rc: C.N_ = [n for n in C.N_ if n.m_[i] * C.m > ave * n.o_[i]]; _C_ += [C]; i_ += [1]
+        if C.m > ave*C.rc: C.N_ = [n for n in C.N_ if n._m_[i] * C.m > ave * n.o_[i]]; _C_ += [C]; i_ += [1]
         else: i_ += [0]
     for N in N_:
-        for Cv_ in N.m_,N.d_,N.r_: Cv_[:] = [Cv for Cv, i in zip(Cv_,i_) if i]
+        for Cv_ in N._m_,N._d_,N._r_: Cv_[:] = [Cv for Cv, i in zip(Cv_,i_) if i]
+        N.m_ = N._m_; N.d_ = N._d_; N.o_ = N._o_  # not sure if we need m_ after this?
     return _C_
 
 def sum2C(N_,_C, _Ci=None):  # fuzzy sum params used in base_comp
@@ -517,8 +519,8 @@ def sum2C(N_,_C, _Ci=None):  # fuzzy sum params used in base_comp
     c_,rc_,dTT_,baseT_,span_,yx_ = zip(*[(n.c, n.rc, n.dTT, n.baseT, n.span, n.yx) for n in N_])
     ccoef_ = []
     for N in N_:  # N_incl *= C_val: pre-selection by likely survival, to avoid post-prune eval:
-        if _Ci==None: _Ci = N.Ct.N_.index(_C)
-        ccoef_ += [N._m_[_Ci] / (ave * N._o_[_Ci]) * _C.m]
+        Ci = N.Ct.N_.index(_C) if _Ci is None else _Ci  # _Ci should be used for checking input only, else the next N is using the current N's _Ci
+        ccoef_ += [N._m_[Ci] / (ave * N._o_[Ci]) * _C.m]
         c_ = [c * max(cc, 0) for c,cc in zip(c_,ccoef_)]
     tot = sum(c_)+eps; Par_ = []
     for par_ in rc_, dTT_, baseT_, span_, yx_:
@@ -711,7 +713,9 @@ def Copy_(N, root=None, init=0, typ=None):
         if typ > 1:
             C.eTT = deepcopy(N.eTT); C.em,C.ed,C.ec = N.em,N.ed,N.ec
             if typ > 2:
-                C.mo_ = deepcopy(getattr(N, 'mo_', []))  # + N,D,C,DTT?
+                # init for C
+                C.Nt.N_ += [N]; N.Ct.N_ += [C]
+                C.m_=[C.m]; C._m_=[C.m]; C.o_=[C.rc]; C._o_=[C.rc]  # not sure, after add N to Nt.N_, we need to add m_, o_ and etc?
     return C
 
 def extend_box(_box, box):
