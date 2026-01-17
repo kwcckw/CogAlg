@@ -1,4 +1,4 @@
-import numpy as np, weakref
+import numpy as np
 from copy import copy, deepcopy
 from math import atan2, cos, floor, pi  # from functools import reduce
 from itertools import zip_longest, combinations, chain, product  # from multiprocessing import Pool, Manager
@@ -160,7 +160,7 @@ def cross_comp(root, rc, fL=0):  # core function mediating recursive rng+ and de
         if nG_ and val_(root.dTT, rc+nw, TTw(root), (len(root.N_)-1)*Lw,1, TTd,cr) > 0:
             nG_,rc = cross_comp(root,rc)
             for nG in nG_:
-                if isinstance(nG.N_[0],CF):  # or eval per fork only?
+                if isinstance(nG.Nt.N_[0],CF):  # or eval per fork only? (should be checking nG.Nt.N_[0]?)
                     trans_cluster(nG, rc+1)  # cluster Ft.N_ levs if H, from sub+ and agg+
     return nG_,rc   # nG_ is recursion flag
 
@@ -327,7 +327,7 @@ def comp_C_(C_, rc,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s
                 if val_(L.dTT, rc+nw, wTTf,fi=0) < 0:  # merge similar but distant centroids, they are non-local
                     _c,c = L.nt
                     if _c is c or c in exc_: continue  # not yet merged
-                    for n in c.N_: add_N(_c,n); _N_ = _C.N_; _N_ += [n]
+                    for n in c.N_: add_N(_c,n); _N_ = _c.N_; _N_ += [n]  # should be _c instead of _C
                     for l in c.rim: l.nt = [_c if n is c else n for n in l.nt]
                     C_ += [_c]; exc_+=[c]
                     if c in C_: C_.remove(c)
@@ -521,11 +521,11 @@ def sum2C(N_,_C, _Ci=None):  # fuzzy sum params used in base_comp
         Ci = N.Ct.N_.index(_C) if _Ci is None else _Ci
         ccoef_ += [N._m_[Ci] / (ave* N._o_[Ci]) * _C.m]  # *_C.m: proj survival, vs post-prune eval?
         c_ = [c * max(cc, 0) for c,cc in zip(c_,ccoef_)]
-        N._m_,N._d_,N._r_ = N.m_,N.d_,N.r_
+        if _Ci is not None: N._m_,N._d_,N._r_ = N.m_,N.d_,N.r_    # should be valid only from cluster_P, when _Ci is not None
     tot = sum(c_)+eps; Par_ = []
     for par_ in rc_, dTT_, baseT_, span_, yx_:
         Par_.append(sum([p * c for p,c in zip(par_,c_)]))
-    C = CN(c=tot, typ=3)
+    C = CN(c=tot, typ=0)
     C.rc, C.dTT, C.baseT, C.span, C.yx = [P / tot for P in Par_]
     C.m, C.d = vt_(C.dTT, C.rc)
     C.Nt = CF(N_=N_,dTT=deepcopy(C.dTT), m=C.m,d=C.d,c=C.c)
@@ -615,7 +615,7 @@ def add_N(G, N, coef=1):  # sum not-CF vars only?
 
     N.fin = 1; N.root = G
     _c,c = G.c,N.c*coef; C=_c+c  # weigh contribution of intensive params
-    if N.typ==3: G.rc = np.sum([o*coef for o in N.o_]); G.rN_+=N.rN_; G.m_+=N.m_; G.o_+=N.o_  # not sure
+    if hasattr(G, 'm_'): G.rc = np.sum([o*coef for o in N.o_]); G.rN_+=N.rN_; G.m_+=N.m_; G.o_+=N.o_  # not sure
     if N.typ:  # not PP
         if N.C_: G.C_+= N.C_; G.Ct.dTT += N.Ct.dTT*coef; G.Ct.c += N.Ct.c*coef  # flat? L_,B_ stay nested
         G.span = (G.span*_c+N.span*c*coef) / C * coef
@@ -694,7 +694,7 @@ def CopyT(F, root=None, cr=1):  # F = CF|CN
 
 def Copy_(N, root=None, init=0, typ=None):
 
-    if typ is None: typ = 2 if init<2 else N.typ  # G.typ = 2, C.typ=3
+    if typ is None: typ = 2 if init<2 else N.typ  # G.typ = 2, C.typ=0
     C = CN(dTT=deepcopy(N.dTT),typ=typ); C.root = N.root if root is None else root
     for attr in ['m','d','c','rc']: setattr(C,attr, getattr(N,attr))
     if not init and C.typ==N.typ: C.Nt = CopyT(N.Nt,root=C)
@@ -711,8 +711,11 @@ def Copy_(N, root=None, init=0, typ=None):
             C.angl = copy(N.angl); C.yx = copy(N.yx)
         if typ > 1:
             C.eTT = deepcopy(N.eTT); C.em,C.ed,C.ec = N.em,N.ed,N.ec
-        if N.C_:
-            C.m_=list(N.m_); N._m_=list(N._m_); C.o_=list(N.o_); C._o_=list(N._o_)
+    if init == 2:  # only C has init == 2, so this must be default?
+        C.m_=[]; C._m_=[]; C.o_=[]; C._o_=[]  # shouldn't be inheriting m and o if init?
+        # We also need to pack N into C.Nt.N_? 
+        C.Nt.N_ += [N]; N.C_ += [C]; N._m_ += [C.m]; N._o_ += [C.rc]; N.m_ += [C.m]; N.o_ += [C.rc] 
+        
     return C
 
 def extend_box(_box, box):
