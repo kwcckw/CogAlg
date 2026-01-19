@@ -170,14 +170,15 @@ def trans_cluster(root, rc):  # may create nested levs, re-order in sort_H?
     def rroot(n): return rroot(n.root) if n.root and n.root != root.root else n
 
     for lev in root.Lt.N_[1:]:  # Lt.N_=H, may be nested in trans_comp
-        if isinstance(lev,CN):  # was trans_comped
-            for tL in lev.N_:  # trans_link
+        for tL in lev.N_:  # trans_link
+            if tL.N_ and isinstance(tL.N_[0],CN): 
                 for Ft, nF in [[getattr(tL,nF), nF] for nF in ('Nt','Bt','Ct')]:
                     if Ft:
                         for F in Ft.N_:  # flat fork trans_link_
                             _root = rroot(F.nt[0]); root = rroot(F.nt[1])
                             add_N(_root,root)  # add nesting if diff elev, also add forks?
         # reval rc, not revised
+        '''
         tL_ = [tL for n in root.N_ for l in n.L_ for tL in l.N_]  # trans-links
         if sum(tL.m for tL in tL_) * ((len(tL_)-1)*Lw) > ave*(rc+connw):  # use tL.dTT?
             mmax_ = []
@@ -189,6 +190,7 @@ def trans_cluster(root, rc):  # may create nested levs, re-order in sort_H?
             tNt, tBt, tCt = root.Lt.N_[-1]
             for m, (Ft, tFt) in zip(mmax_,((root.Nt,tNt),(root.Bt,tBt),(root.Ct,tCt))): # +rdn in 3 fork pairs
                 r = sm_.index(m); Ft.rc+=r; tFt.rc+=r  # rc+=rdn
+        '''
 
 def comp_N_(iN_, rc, _iN_=[]):  # incremental-distance cross_comp, max dist depends on prior match
 
@@ -276,8 +278,15 @@ def comp_F_(_F_,F_,nF, rc, root):  # root is link, unpack node trees down to num
                 for _n,n in product(_oN_,oN_):
                     comp_n(_n,n, TTm,TTd,cm,cd,rc, dN_); nm,nd= vt_(TTm,rc); m+=nm; d+=nd
             else: dN_ = list(_oN_)+list(oN_); Cx = CF  # keep not-compared offsets?
-            L_ += [Cx(N_=dN_,dTT=tt, m=m,d=d, c=min(_lev.c,lev.c), rc=rc,root=root)]  # L_ = H
-    if L_: setattr(root,nF, sum2F(L_,nF,root,TTm,cm, fCF=0,))  # root is Link or trans_link
+            # if there's no dN_, stop and break?
+            if dN_:
+                lev = Cx(dTT=tt, m=m,d=d, c=min(_lev.c,lev.c), rc=rc,root=root)
+                setattr(lev.Nt, 'N_', dN_) if Cx == CN else setattr(lev, 'N_', dN_)   # we need to assign N_ manually here since CN doesn't accept N_ as input argument now
+                L_ += [lev]  # L_ = H  (L_ may contain CF and CN at the same time)
+            else:
+                break
+                
+    if L_: setattr(root,nF, sum2F(L_,nF,root,TTm,cm, fCF=0))  # root is Link or trans_link
 
 def base_comp(_N,N):  # comp Et, baseT, extT, dTT
 
@@ -420,7 +429,7 @@ def cluster_N(root, _N_, rc, fL=0):  # flood-fill node | link clusters, flat, re
                 c = nc + lc + bc*br + cc*cr
                 tt = (nt*nc + lt*lc + bt*bc*br + ct*cc*cr) / c
                 if val_(tt,rc, TTw(root), (len(N_)-1)*Lw) > 0 or fL:
-                    G_ = [sum2G(((N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc)), tt,c, rc,root)]  # calls sub+/ 3 forks, br,cr?
+                    G_ += [sum2G(((N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc)), tt,c, rc,root)]  # calls sub+/ 3 forks, br,cr? (should be += here)
                     L__+=L_; TT+=tt; nTT+=nt; lTT+=lt; C+=c; nC+=nc; lC+=lc
                     # G.TT * cr * rcr?
         if G_ and (fL or val_(TT, rc+1, TTw(root), (len(G_)-1)*Lw)):  # include singleton lGs
@@ -595,9 +604,9 @@ def sum2F(F_, nF, root, TT=None, C=0, fset=1, fCF=1):
     NH =[]; m,d= vt_(TT); F = F_[0]
     if fCF: Ft = CF(nF=nF,dTT=TT,m=m,d=d,c=C,root=root)
     else:   Ft = CN(dTT=TT,m=m,d=d,c=C,root=root); Ft.nF = nF
-    if F.N_:
-        L1 = CF(nF=nF,root=Ft)
-        for F in F_:
+    L1 = CF(nF=nF,root=Ft)
+    for F in F_:
+        if F.N_:  # this should be here? (Link.Nt.N_ could be empty)
             cr = F.c / C
             if isinstance(F.N_[0],CF):  # G.Nt.N_=H, top-down, eval sort_H?
                 if NH:
@@ -608,10 +617,10 @@ def sum2F(F_, nF, root, TT=None, C=0, fset=1, fCF=1):
                 else: NH = [CopyT(lev,Ft,cr*(lev.c/F.c)) for lev in F.N_]
             else:
                 for N in F.N_: add_F(L1, N, cr)  # concat N_s, deeper than TT,C
-        if L1: L1.rc /= len(L1.N_)
-        if NH:  # any nested F
-            if L1: add_F(NH[0], L1, cr=1)  # same rc?
-        else: NH = [L1]
+    if L1: L1.rc /= len(L1.N_)
+    if NH:  # any nested F
+        if L1: add_F(NH[0], L1, cr=1)  # same rc?
+    else: NH = [L1]
     Ft.N_ = [CF(N_=F_,dTT=TT, m=m,d=d,c=C,root=root)] + NH if NH else F_  # add top lev
     if fset:
         setattr(root, nF,Ft); root_update(root, Ft)
