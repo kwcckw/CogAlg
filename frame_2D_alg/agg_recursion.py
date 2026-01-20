@@ -169,14 +169,21 @@ def trans_cluster(root, rc):  # trans_links mediate re-order in sort_H?
 
     def rroot(n): return rroot(n.root) if n.root and n.root != root else n  # root is nG
 
-    for lev in root.Lt.N_[1:]:  # Lt.N_= H, may be nested in trans_comp
+    for lev in root.Lt.N_:  # Lt.N_= H, may be nested in trans_comp (top L has trans comp from comp_N too)
         for tL in lev.N_:  # trans_link
-            for Ft, nF in [[getattr(tL,nF), nF] for nF in ('Nt','Bt','Ct')]:
-                if Ft:
-                    for F in Ft.N_:  # flat fork trans_link_s
-                        _rrt = rroot(F.nt[0]); rrt = rroot(F.nt[1])
-                        if _rrt is not rrt: add_N(_rrt, rrt)  # merge new roots, nest / ddepth, also add forks?
-        # reval rc, not revised
+            for nF_ in ['N_', 'B_', 'C_']:  # it could be simpler using N_, B_ or C_? Or we need every level?
+                F_ = getattr(tL,nF_)  
+                for F in F_:  # flat fork trans_link_s  (tL.Nt.N_ may be nested with levels?)
+                    _rrt = rroot(F.nt[0]); rrt = rroot(F.nt[1])
+                    if _rrt is not rrt: add_N(_rrt, rrt)  # after the merging, F.nt[0] and F.nt[1] should point to the same N?
+                    
+                    # suggestion below is not relevant? Since they will be merged anyway
+                    '''
+                    if _rrt.c < rrt.c:  # stable union: smaller into larger
+                        _rrt, rrt = rrt, _rrt
+                    '''
+        
+       # reval rc, not revised
         '''
         tL_ = [tL for n in root.N_ for l in n.L_ for tL in l.N_]  # trans-links
         if sum(tL.m for tL in tL_) * ((len(tL_)-1)*Lw) > ave*(rc+connw):  # use tL.dTT?
@@ -273,9 +280,8 @@ def comp_F_(_F_,F_,nF, rc, root):  # root is link, unpack node trees down to num
             iN_ = list(_sN_ & sN_)  # intersect = match
             for n in iN_: TT += n.dTT; C += n.c; rc += n.rc
             _oN_= _sN_-sN_; oN_= sN_-_sN_; dN_= []
-            if _oN_ and oN_:
-                for _n,n in product(_oN_,oN_):
-                    cm,_ = comp_n(_n,n, TTm,TTd,cm,cd,rc, dN_)  # comp offsets, rc += n.rc?
+            for _n,n in product(_oN_,oN_):
+                cm,_ = comp_n(_n,n, TTm,TTd,cm,cd,rc, dN_)  # comp offsets, rc += n.rc?
             TT += TTm; m,d = vt_(TT,rc); C += cm
             L_ += [CF(nF='tF',N_=dN_, dTT=TT,m=m,d=d,c=C, rc=rc/(len(dN_+iN_)+1), root=root)]  # L_ = H
     if L_: setattr(root,nF, sum2F(L_,nF,root,TTm,cm, fCF=0))  # root is Link or trans_link
@@ -589,8 +595,8 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
 
 def sum2F(F_, nF, root, TT=None, C=0, fset=1, fCF=1):
 
-    def add_F(F,f, cr):
-        F.N_+=f.N_; F.dTT+=f.dTT*cr; F.c+=f.c; F.rc+=cr  # -> ave cr?
+    def add_F(F,f, cr, fmerge=1):
+        F.N_.extend(f.N_) if fmerge else F.N_.append(N); F.dTT+=f.dTT*cr; F.c+=f.c; F.rc+=cr  # -> ave cr?
     if not C:
         C = sum([n.c for n in F_]); TT = np.sum([n.dTT for n in F_], axis=0)  # *= cr?
     NH =[]; m,d= vt_(TT)
@@ -608,12 +614,14 @@ def sum2F(F_, nF, root, TT=None, C=0, fset=1, fCF=1):
                             else: add_F(Lev,lev, cr*(lev.c/F.c))
                 else: NH = [CopyT(lev,Ft,cr*(lev.c/F.c)) for lev in F.N_]
             else:
-                for N in F.N_: add_F(L1, N, cr)  # concat N_s, deeper than TT,C
-    if L1: L1.rc /= len(L1.N_)
-    if NH:  # any nested F
-        if L1: add_F(NH[0], L1, cr=1)  # same rc?
-    else: NH = [L1]
-    Ft.N_ = [CF(N_=F_,dTT=TT, m=m,d=d,c=C,root=root)] + NH if NH else F_  # add top lev
+                # L1.N_ should be packing N instead of N.N_ here? Else the whole level of N is skipped
+                for N in F.N_: add_F(L1, N, cr, fmerge=0)  # concat N_s, deeper than TT,C
+    if L1:  # below should be valid only if L1 is not empty?
+        L1.rc /= len(L1.N_)
+        if NH:  # any nested F
+            if L1: add_F(NH[0], L1, cr=1)  # same rc?
+        else: NH = [L1]
+    Ft.N_ = ([CF(N_=F_,dTT=TT, m=m,d=d,c=C,root=root)] + NH) if NH else F_  # add top lev
     if fset:
         setattr(root, nF,Ft); root_update(root, Ft)
     return Ft
@@ -687,6 +695,7 @@ def CopyT(F, root=None, cr=1):  # F = CF|CN
     C = CF(dTT=F.dTT * cr, root=root or F.root)
     for nF in ['Nt','Bt','Ct']:
         if sub_F:=getattr(F,nF):
+            if not sub_F.N_: continue
             if isinstance(sub_F.N_[0],CN): C.N_ = copy(F.N_)
             else: C.N_ = [CopyT(lev,cr) for lev in F.N_]
     return C
