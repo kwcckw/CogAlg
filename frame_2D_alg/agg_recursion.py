@@ -1,7 +1,7 @@
 import numpy as np
 from copy import copy, deepcopy
-from math import atan2, cos, floor, pi  # from functools import reduce
-from itertools import zip_longest, combinations, chain, product  # from multiprocessing import Pool, Manager
+from math import atan2, cos, pi  # from functools import reduce
+from itertools import zip_longest, combinations, product  # from multiprocessing import Pool, Manager
 from frame_blobs import frame_blobs_root, imread, comp_pixel, CBase
 from slice_edge import slice_edge
 from comp_slice import comp_slice, w_t
@@ -606,18 +606,21 @@ def sum2F(F_, nF, root, TT=None, C=0, fset=1, fCF=1):  # add sub-forks merge?
     if fCF: Ft = CF(nF=nF,dTT=TT,m=m,d=d,c=C,root=root)
     else:   Ft = CN(dTT=TT,m=m,d=d,c=C,root=root); Ft.nF = nF
     for F in F_:
-        if F.N_:
-            cr = F.c / C
-            if isinstance(F.N_[0],CF):  # G.Nt.N_=H, top-down, eval sort_H?
+        ft = getattr(F, nF)
+        if ft.N_:
+            # cr = F.c / C  # we are not using the cr here? it can be recomputed in sum2F later
+            if isinstance(ft.N_[0],CF):  # G.Nt.N_=H, top-down, eval sort_H? (we should check Ft.N_[0] instead of F.N_[0] since F.N_ gets the top level)
                 if NH:
-                    for Lev, lev in zip_longest(NH, F.N_):
+                    for Lev, lev in zip_longest(NH, ft.N_):
                         if lev:
                             if Lev: Lev += lev.N_
-                            else:   NH += [lev.N_]
-                else: NH = [lev.N_ for lev in F.N_]
-            elif NH: NH[0] += F.N_  # flat levs
-            else:    NH = [F.N_]
+                            else:   NH += [lev.N_[:]]
+                else: NH = [lev.N_[:] for lev in F.N_]
+            elif NH:   NH[0] += ft.N_  # flat levs
+            elif ft.N_: NH = [ft.N_[:]]  # F.N_ could be empty for L or PP ([:] prevents a same reference)
+
     Ft.N_ = [sum2F(N_,nF,root=Ft) for N_ in NH] if NH else F_  # add cr in sum2F: lev.rc /= len(lev.N_)?
+    if NH: Ft.N_.insert(0, CF(N_=F_, nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft))  # top level
     if fset:
         setattr(root, nF,Ft); root_update(root, Ft)
     return Ft
@@ -708,12 +711,21 @@ def root_replace(root, rc, TT,C, N_,nTT,nc,L_,lTT,lc):
 
 def CopyF(F, root=None, cr=1):  # F = CF|CN
 
-    C = CF(dTT=F.dTT * cr, root=root or F.root)
+    C = CF(dTT=F.dTT * cr, m=F.m, d=F.d, c=F.c, root=root or F.root)
+    CN_ = []
+    for N in F.N_:
+        if isinstance(N, CF): CN_ += [CopyF(N)]  # copy level
+        else:                 CN_ += [Copy_(N)]  # copy N
+    C.N_ = CN_
+    
+    # below can be removed since CF doesn't have Ft now?
+    '''
     for nF in ['Nt','Bt','Ct']:
         if sub_F:=getattr(F,nF):
             if not sub_F.N_: continue
             if isinstance(sub_F.N_[0],CN): C.N_ = copy(F.N_)
             else: C.N_ = [CopyF(lev,cr) for lev in F.N_]
+    '''
     return C
 
 def Copy_(N, root=None, init=0, typ=None):
@@ -725,6 +737,7 @@ def Copy_(N, root=None, init=0, typ=None):
     if typ:
         for attr in ['fin','span','mang','sub','exe']: setattr(C,attr, getattr(N,attr))
         for attr in ['nt','baseT','box','rim','compared']: setattr(C,attr, copy(getattr(N,attr)))
+        for attr in ['Nt','Lt','Bt','Ct']: setattr(C,attr, CopyF(getattr(N,attr)))  # we need to copy Ft too?
         if init:  # new G
             C.rim = []; C.em = C.ed = 0
             C.yx = [N.yx]; C.angl = np.array([copy(N.angl[0]), N.angl[1]],dtype=object)  # to get mean
@@ -887,7 +900,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                 nG_ = [PP2N(PPm) for PPm in PPm_]
                 for PPd in edge.link_: PP2N(PPd)
                 for nG in nG_:
-                    if nG.B_: sum2F([B.root for B in nG.B_],'Bt',nG,1)
+                    if nG.B_: sum2F([B.root for B in nG.B_],'Bt',nG,fset=1)
                 if val_(np.sum([n.dTT for n in nG_],0),3, TTw(tile), (len(PPm_)-1)*Lw) > 0:
                     G_, rc = trace_edge(nG_,3, tile, tT)  # flatten, cluster B_-mediated Gs, init Nt (we need to return G_)?
     if G_:
