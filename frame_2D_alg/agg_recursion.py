@@ -600,26 +600,32 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
 
 def sum2F(N_, nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # always sum to Ft?
 
-    nH, NH = [],[]
+    nH = []
     for N in N_:
-        ft = getattr(N, nF)
+        # N_ could be CF from trans comp in comp_F_
+        ft = N.Nt if hasattr(N, 'Nt') else N  # actually this should be always 'Nt'? That nF is only applicable for the nF assignment of Ft?
         if ft.N_:
             if not C: TT += ft.dTT; C += ft.c; Rc += ft.rc
             if isinstance(ft.N_[0], CF):  # Ft.N_=H, top-down, eval sort_H?
                 if nH:
                     for Lev,lev in zip_longest(nH, reversed(ft.N_)):  # align bottom-up
-                        if lev.N_:
+                        if lev and lev.N_:
                             if Lev: Lev += lev.N_
                             else:   nH += [lev.N_[:]]
-                else: nH = [lev.N_[:] for lev in N.N_]
-            elif NH:  nH[0] += ft.N_  # flat
+                else: nH = [lev.N_[:] for lev in ft.N_]  # we should use ft.N_ here to get lev, N.N_ is getting the top level's N_ instead
+            elif nH:  nH[0] += ft.N_  # flat
             else:     nH = [ft.N_[:]]
     m,d = vt_(TT)
     Cx = CF if fCF else CN
     Ft = Cx(nF=nF, dTT=TT,m=m,d=d,c=C, rc=Rc/len(N_), root=root)
-    for n_ in reversed(nH):
-        NH += [sum2F(n_,nF, Ft)]  # always nested above
-    Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)] + NH  # add top level
+    # NH = [sum2F(n_,nF, Ft) for n_ in reversed(nH)]   # always nested above
+    # Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)] + NH  # add top level
+    Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)]  # add top level
+    for n_ in nH:
+        dTT = np.sum([n.dTT for n in n_],axis=0)
+        C = sum([n.rc for n in n_])
+        m,d = vt_(dTT)
+        Ft.N_ += [CF(N_=n_,nF=nF,dTT=dTT,m=m,d=d,c=C,root=Ft)] 
     if fset:
         setattr(root, nF,Ft); root_update(root, Ft)
     return Ft
@@ -645,28 +651,33 @@ def add_N(G, N, coef=1, merge=0):  # sum Fts if merge
 
 def add_F(F,f, cr=1, merge=1):
 
-    cc = F.c / f.c  # * cr?
-    F.dTT+= f.dTT*cc; m,d = vt_(F.dTT,F.rc); F.m=m; F.d=d
-    F.rc = (F.rc+ f.rc*cc)/ 2
-    F.c += f.c
-    FH = isinstance(F.N_[0],CF); fH=isinstance(f.N_[0],CF)
+    def add_params(F, f):
+        cc = F.c / f.c  # * cr?
+        F.dTT+= f.dTT*cc; m,d = vt_(F.dTT,F.rc); F.m=m; F.d=d
+        F.rc = (F.rc+ f.rc*cc)/ 2
+        F.c += f.c
+    
+    add_params(F, f)
+    FH = F.N_ and isinstance(F.N_[0],CF); fH=isinstance(f.N_[0],CF)  # F.N_ could be empty
     if merge:
-        if hasattr(F,'Nt'): merge_f(F,f, cc)
+        if hasattr(F,'Nt'): merge_f(F,f, cr)
         else:
-            if FH: F.N_ += f.N_ if fH else [f]
-            else:  F.N_ = [F] + f.N_ if fH else [f]
-        if FH or fH:
-            if FH and not fH:   f.N_ = [CopyF(f)]
-            elif fH and not FH: F.N_ = [CopyF(F)]
-            for Lev,lev in zip(reversed(f.N_), reversed(f.N_)):  # align bottom-up
-                if lev:
-                    if Lev: add_F(Lev, lev, cr, merge=1)
-                    else:   F.N_.append(CopyF(lev,root=F))
-        else:
-           F.N_.extend(f.N_)
-    else:
-        F.N_.append(f)
-
+            if FH: # F is nested
+                if fH:  # both are nested (contain levels)
+                    for Lev, lev in zip_longest(reversed(F.N_), reversed(f.N_), fillvalue=None):
+                        if f:
+                            if F is not None: add_F(Lev, lev, cr, merge=1)       # merge levels
+                            else:             F.N_.insert(0, CopyF(lev,root=F))  # add new level 
+                else:  # FH is nested, fH is not nested
+                    for n in f.N_: add_params(F.N_[-1], n); F.N_[-1].N_ += [n]  # bottom-up: sum f.N_ to the bottom level
+            elif fH: # F is not nested, f is nested
+                lev_ = [CopyF(lev, root=F,cr=cr) for lev in f.N_]  # copy f's levels
+                for n in F.N_: add_params(lev_[-1], n); F.N_[-1].N_ += [n]  # bottom-up: sum F.N_ to the bottom level
+                F.N_ = lev_  # reassign levels
+            else:  # Both F and f are not nested
+                for n in f.N_: add_params(F, n); F.N_ += [n]
+                    
+                
 def merge_f(N,n, cc=1):
     for Ft, ft in zip((N.Nt, N.Bt, N.Ct, N.Lt), (n.Nt, n.Bt, n.Ct, n.Lt)):
         if ft:
