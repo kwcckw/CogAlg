@@ -603,22 +603,31 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # always 
 
     nH = []
     for F in N_:  # fork-specific N_
+        Nt = F.Nt if hasattr(F, 'Nt') else F  # CF from comp_F_
         if F.N_:
             if not C: TT += F.dTT; C += F.c; Rc += F.rc
-            if isinstance(F.Nt.N_[0],CF):  # H, top-down, eval sort_H?
+            if isinstance(Nt.N_[0],CF):  # H, top-down, eval sort_H?
                 if nH:
-                    for Lev,lev in zip_longest(nH, reversed(F.Nt.N_)):  # align bottom-up
+                    for Lev,lev in zip_longest(nH, reversed(Nt.N_)):  # align bottom-up
                         if lev and lev.N_:
                             if Lev: Lev += lev.N_
                             else:   nH += [lev.N_[:]]
-                else: nH = [lev.N_[:] for lev in F.Nt.N_]
+                else: nH = [lev.N_[:] for lev in Nt.N_]
             elif nH:  nH[0] += F.N_  # flat
             else:     nH = [F.N_[:]]
     m,d = vt_(TT)
     Cx = CF if fCF else CN
     Ft = Cx(nF=nF, dTT=TT,m=m,d=d,c=C, rc=Rc/len(N_), root=root)
-    nH = [sum2F(n_,nF, Ft) for n_ in reversed(nH)]  # rev, nested above
-    Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)] + nH  # + top level
+    nH = [sum2F(n_,nF, Ft) for n_ in reversed(nH)]  # rev, nested above (sum2F here may created nested level)
+    Ft.N_ = ([CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)] + nH) if nH else N_  # + top level  (that top level should not be default? Only if nH is not empty)
+    '''
+    for n_ in nH:
+        dTT = np.sum([n.dTT for n in n_],axis=0)
+        C = sum([n.rc for n in n_])
+        m,d = vt_(dTT)
+        Ft.N_ += [CF(N_=n_,nF=nF,dTT=dTT,m=m,d=d,c=C,root=Ft)] 
+    Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)] + Ft.N_
+    '''
     if fset:
         setattr(root, nF,Ft); root_update(root, Ft)
     return Ft
@@ -645,11 +654,11 @@ def add_N(G, N, coef=1, merge=0):  # sum Fts if merge
 def add_F(F,f, cr=1, merge=1):
 
     def sum_H(H,h, cr, root):  # reverse to align bottom-up:
-        for Lev,lev in zip(reversed(H), reversed(h)):
+        for Lev,lev in zip_longest(reversed(H), reversed(h)):  # should use zip_longest here to copy missing levels
             if lev:
                 if Lev: add_F(Lev, lev, cr, merge=1)
                 else:   H.append(CopyF(lev, root))
-        return reversed(H)
+        return list(reversed(H))  # use list to convert from iterator into list
     # cc *= cr?
     cc = F.c / f.c
     F.dTT+= f.dTT*cc; m,d = vt_(F.dTT,F.rc); F.m=m; F.d=d
@@ -657,7 +666,7 @@ def add_F(F,f, cr=1, merge=1):
     if merge:
         if hasattr(F,'Nt'): merge_f(F,f, cc)
         else:
-            fH = isinstance(F.N_[0], CF);   fh = isinstance(f.N_[0], CF)
+            fH = any(F.N_) and isinstance(F.N_[0], CF);   fh = isinstance(f.N_[0], CF)
             H = F.N_ if fH else [CopyF(F)]; h = f.N_ if fh else [CopyF(f)]
             if fH or fh:
                 F.N_ = sum_H(H,h, cr,F)  # only for Fts
