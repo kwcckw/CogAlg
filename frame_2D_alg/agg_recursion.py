@@ -155,7 +155,7 @@ def cross_comp(root, rc, fL=0):  # core function mediating recursive rng+ and de
         for n in iN_: n.em, n.ed = vt_(np.sum([l.dTT for l in n.rim],axis=0), rc)
         cr = cd/(c+cd) *.5  # dfork borrow ratio, .5 for one direction
         if val_(TT, rc+connw, TTw(root), (len(L_)-1)*Lw,1, TTd,cr) > 0 or fL:
-            sum2F(L_,'Lt',root)  # Bt in dfork
+            sum2F(L_,'Lt',root)  # Bt in dfork (deeper levels are always trans?)
             E_ = get_exemplars({N for L in L_ for N in L.nt if N.em}, rc)  # exemplar N_|C_
             nG_,rc = cluster_N(root, E_,rc,fL)  # form Bt,Ct, 3-fork sub+ in sum2G
         # agg+:
@@ -171,7 +171,7 @@ def trans_cluster(root, rc):  # trans_links mediate re-order in sort_H?
     def rroot(n): return rroot(n.root) if n.root and n.root != root else n  # root is nG
     FH_ = [[],[],[]]
     for L in root.L_:  # base links
-        for FH,Ft in zip(FH_, L.L_):  # trans_links: [Nt,Bt,Ct]
+        for FH,Ft in zip(FH_, (L.Nt, L.Bt, L.Ct)):  # trans_links: [Nt,Bt,Ct]
             for Lev,lev in zip_longest(FH, Ft.N_):  # always H?
                 if lev:
                     if Lev: Lev += lev.N_  # concat for sum2F
@@ -278,7 +278,7 @@ def comp_F_(_F_,F_,nF, rc, root):  # root is nG, unpack node trees down to numer
             if _N is N: dtt = np.array([N.dTT[1], np.zeros(9)]); TTm += dtt; C=1; Cd=0  # overlap is pure match
             else:       cm,cd = comp_n(_N,N, TTm,TTd,C,Cd,rc,L_); C+=cm; Cd+=cd
             Rc+=_N.rc+N.rc; cc += 1
-        if L_: setattr(root,nF, sum2F(L_,nF,root,TTm, C, Rc/cc))
+        if L_: setattr(root,nF, sum2F(L_,'tF',root,TTm, C, Rc/cc))  # nF here should be tF too?
     else:
         for _lev,lev in zip(_F_,F_):  # L_ = H
             rc += 1  # deeper levels are redundant
@@ -591,8 +591,8 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
             G.L_ = L_
     if B_ and typ > 1 and G.Bt and G.Bt.d > avd * rc * nw:  # no ddfork
         B_,_rc = cross_comp(G, rc, fL=1)  # comp Bt.N_
-    if B_: sum2F(B_,'Bt',G, rc)  # maybe updated above
-    if C_: sum2F(C_,'Ct',G, rc)
+    if B_: sum2F(B_,'Bt',G, Rc=rc)  # maybe updated above
+    if C_: sum2F(C_,'Ct',G, Rc=rc)
     if fsub:  # sub+
         if G.Lt.m * G.Lt.d * ((len(N_)-1)*Lw) > ave * avd * (rc+1) * cw:  # divisive clustering if Match * Variance
             V = G.m - ave * (rc+1)
@@ -602,25 +602,32 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     G.rN_= sorted(G.rN_, key=lambda x: (x.m/x.c), reverse=True)  # only if lG?
     return G
 
-def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # always sum to Ft?
+def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1, funpack=1):  # always sum to Ft?
 
     nH = []  # old H: unpack,concat,resum existing node levels, then sum,append new lev from N_
-    for F in N_:  # fork-specific N_
-        if not C: TT += F.dTT; C += F.c; Rc += F.rc
-        if isinstance(F.Nt.N_[0],CF):  # H, top-down, eval sort_H?
-            if nH:
-                for Lev,lev in zip_longest(nH, reversed(F.Nt.N_)):  # align bottom-up
-                    if lev and lev.N_:
-                        if Lev: Lev += lev.N_
-                        else:   nH += [lev.N_[:]]
-            else: nH = [[list(lev.N_)] for lev in F.Nt.N_]
-        elif nH:  nH[0] += F.N_  # flat
-        else:     nH = [list(F.N_)]
+    if funpack:
+        for F in N_:  # fork-specific N_
+            if not F.Nt.N_: continue  # we may get empty Nt.N_ in PPd, when we sum B_ into Bt
+            if not C: TT += F.dTT; C += F.c; Rc += F.rc
+            if isinstance(F.Nt.N_[0],CF):  # H, top-down, eval sort_H?
+                if nH:
+                    for Lev,lev in zip_longest(nH, reversed(F.Nt.N_)):  # align bottom-up
+                        if lev and lev.N_:
+                            if Lev: Lev += lev.N_
+                            else:   nH += [lev.N_[:]]
+                else: nH = [list(lev.N_) for lev in F.Nt.N_]  # the additional bracket is not needed, since it's causing additional nesting
+            elif nH:  nH[0] += F.N_  # flat
+            else:     nH = [list(F.N_)]
+    else:  # for deeper recursive sum2F
+        TT = np.sum([N.dTT for N in N_],axis=0)
+        Rc =sum([N.rc for N in N_])
+        C =sum([N.c for N in N_])
+
     m,d = vt_(TT)
     Cx = CF if fCF else CN
     Ft = Cx(nF=nF, dTT=TT,m=m,d=d,c=C, rc=Rc/len(N_), root=root)
-    nH = [sum2F(n_,nF, Ft) for n_ in reversed(nH)]  # reversed flat n_s
-    Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)] + nH  # + top level
+    nH = [sum2F(n_,nF, Ft, fset=0, funpack=0) for n_ in reversed(nH)]  # reversed flat n_s
+    Ft.N_ = ([CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)] + nH) if nH else N_  # + top level
     if fset:
         setattr(root, nF,Ft); root_update(root, Ft)
     return Ft
