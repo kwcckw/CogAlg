@@ -75,7 +75,7 @@ class CN(CBase):
         n.em, n.ed, n.ec = kwargs.get('em',0),kwargs.get('ed',0),kwargs.get('ec',0)  # sum dTT
         n.eTT = kwargs.get('eTT',np.zeros((2,9)))  # sum rim dTT
         n.rc  = kwargs.get('rc', 1)  # redundancy to ext Gs, ave in links?
-        n.Nt, n.Bt, n.Ct, n.Lt = (kwargs.get(fork,CF()) for fork in ('Nt','Bt','Ct','Lt'))  # L.Lt is trans_link forks
+        n.Nt, n.Bt, n.Ct, n.Lt = (kwargs.get(fork,CF()) for fork in ('Nt','Bt','Ct','Lt'))  # L.Lt is empty till comp L, convert to tFs?
         # Fork tuple: [N_,dTT,m,d,c,rc,nF,root], N_ may be H: [N_,dTT] per level, nest=len(N_)
         n.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,A: not ders, in links for simplicity, mostly redundant
         n.nt    = kwargs.get('nt', [])  # nodet, links only
@@ -103,7 +103,7 @@ class CF(CBase):
         f.d  = kwargs.get('d', 0)
         f.c  = kwargs.get('c', 0)
         f.rc = kwargs.get('rc', 0)
-        f.nF = kwargs.get('nF','')  # 'Nt','Lt','Bt','Ct'?
+        f.nF = kwargs.get('nF','')  # 'Nt','Lt','Bt','Ct'
         f.root = kwargs.get('root',None)
     def __bool__(f): return bool(f.c)
 
@@ -150,21 +150,21 @@ def TTw(G): return getattr(G,'wTT',wTTf)
 def cross_comp(root, rc, fL=0):  # core function mediating recursive rng+ and der+ cross-comp and clustering, rc=rdn+olp
 
     N_ = (root.N_,root.B_)[fL]; nG_ = []
-    iN_, L_,TT,c,TTd,cd = comp_N_(N_,rc) if N_[0].typ<3 else comp_C_(N_,rc, fC=1)  # nodes | centroids
+    iN_, L_,TT,c,TTd,cd = comp_N_(N_,rc) if N_[0].typ else comp_C_(N_,rc, fC=1)  # nodes | centroids
     if L_:
         for n in iN_: n.em, n.ed = vt_(np.sum([l.dTT for l in n.rim],axis=0), rc)
         cr = cd/(c+cd) *.5  # dfork borrow ratio, .5 for one direction
         if val_(TT, rc+connw, TTw(root), (len(L_)-1)*Lw,1, TTd,cr) > 0 or fL:
-            sum2F(L_,'Lt',root)  # Bt in dfork (deeper levels are always trans?)
+            sum2F(L_,'Lt',root)  # Bt in dfork
             E_ = get_exemplars({N for L in L_ for N in L.nt if N.em}, rc)  # exemplar N_|C_
-            nG_,rc = cluster_N(root, E_,rc,fL)  # form Bt,Ct, 3-fork sub+ in sum2G
+            nG_,rc = cluster_N(root, E_,rc,fL)  # form Bt,Ct, sub+ in sum2G
         # agg+:
         if nG_ and val_(root.dTT, rc+nw, TTw(root), (len(root.N_)-1)*Lw,1, TTd,cr) > 0:
-            nG_,rc = cross_comp(root,rc)
+            nG_,rc = cross_comp(root,rc)  # comp E_| N_| C_ within higher root
             for nG in nG_:
                 if isinstance(nG.Lt.N_[0],CF):  # Lt.N_=H,[1:] = globally spliced trans_links
                     trans_cluster(nG, rc)  # merge trans_link- connected Gs, from sub+ + agg+
-    return nG_,rc   # nG_ is recursion flag
+    return nG_, rc  # nG_ is recursion flag
 
 def trans_cluster(root, rc):  # trans_links mediate re-order in sort_H?
 
@@ -184,7 +184,7 @@ def trans_cluster(root, rc):  # trans_links mediate re-order in sort_H?
                     rt0 = tL.nt[0].root; rt1 = tL.nt[1].root
                     if rt0 is rt1: continue
                     merge = rt0 is root == rt1 is root  # else append
-                    if not merge and rt0 is root: rt0,rt1 = rt1,rt0  # concat in higher G if not equal?
+                    if not merge and rt0 is root: rt0,rt1 = rt1,rt0  # concat in higher G
                     add_N(rt0, rt1, merge)
             # set tFt:
             FH = [sum2F(n_,nF,getattr(root.Lt, nF)) for n_ in FH]; sum2F(FH, nF, root.Lt)
@@ -278,7 +278,7 @@ def comp_F_(_F_,F_,nF, rc, root):  # root is nG, unpack node trees down to numer
             if _N is N: dtt = np.array([N.dTT[1], np.zeros(9)]); TTm += dtt; C=1; Cd=0  # overlap is pure match
             else:       cm,cd = comp_n(_N,N, TTm,TTd,C,Cd,rc,L_); C+=cm; Cd+=cd
             Rc+=_N.rc+N.rc; cc += 1
-        if L_: setattr(root,nF, sum2F(L_,'tF',root,TTm, C, Rc/cc))  # nF here should be tF too?
+        if L_: setattr(root,nF, sum2F(L_,'nF',root,TTm, C, Rc/cc))
     else:
         for _lev,lev in zip(_F_,F_):  # L_ = H
             rc += 1  # deeper levels are redundant
@@ -531,8 +531,7 @@ def cluster_P(_C_,N_,rc):  # Parallel centroid refining, _C_ from cluster_C, N_=
         for _v,v_ in zip((N._m_,N._d_,N._r_), (N.m_,N.d_,N.r_)):
             v_[:] =[v for v,i in zip(v_,in_) if i]; _v[:] = []
     return _C_
-'''
-next order is level-parallel cluster_H, over multiple agg+? compress as autoencoder? '''
+''' next order: level-parallel cluster_H / multiple agg+? compress as autoencoder? '''
 
 def sum2C(N_,_C, _Ci=None):  # fuzzy sum params used in base_comp
 
@@ -593,41 +592,40 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
         B_,_rc = cross_comp(G, rc, fL=1)  # comp Bt.N_
     if B_: sum2F(B_,'Bt',G, Rc=rc)  # maybe updated above
     if C_: sum2F(C_,'Ct',G, Rc=rc)
-    if fsub:  # sub+
-        if G.Lt.m * G.Lt.d * ((len(N_)-1)*Lw) > ave * avd * (rc+1) * cw:  # divisive clustering if Match * Variance
-            V = G.m - ave * (rc+1)
+    if fsub:
+        if G.Lt.m * G.Lt.d * ((len(N_)-1)*Lw) > ave*avd * (rc+1) * cw:  # Variance * borrowed Match?
+            V = G.m - ave * (rc+1)  # divisive clustering forks:
             if mdecay(L_) > decay:
                 if V > ave*centw: cluster_C(G,N_,rc+1)  # cent cluster: N_->Ct.N_, higher than G.C_
             elif V > ave*connw: cluster_N(G,N_,rc+1)  # conn cluster/ higher filter: N_-> Nt.N_| N_
     G.rN_= sorted(G.rN_, key=lambda x: (x.m/x.c), reverse=True)  # only if lG?
     return G
 
-def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1, funpack=1):  # always sum to Ft?
+def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # always sum to Ft?
 
-    nH = []  # old H: unpack,concat,resum existing node levels, then sum,append new lev from N_
-    if funpack:
-        for F in N_:  # fork-specific N_
-            if not F.Nt.N_: continue  # we may get empty Nt.N_ in PPd, when we sum B_ into Bt
-            if not C: TT += F.dTT; C += F.c; Rc += F.rc
-            if isinstance(F.Nt.N_[0],CF):  # H, top-down, eval sort_H?
-                if nH:
-                    for Lev,lev in zip_longest(nH, reversed(F.Nt.N_)):  # align bottom-up
-                        if lev and lev.N_:
-                            if Lev: Lev += lev.N_
-                            else:   nH += [lev.N_[:]]
-                else: nH = [list(lev.N_) for lev in F.Nt.N_]  # the additional bracket is not needed, since it's causing additional nesting
-            elif nH:  nH[0] += F.N_  # flat
-            else:     nH = [list(F.N_)]
-    else:  # for deeper recursive sum2F
-        TT = np.sum([N.dTT for N in N_],axis=0)
-        Rc =sum([N.rc for N in N_])
-        C =sum([N.c for N in N_])
-
+    nH = []  # old H: unpack,concat,resum existing node levs, + sum,append new N_ lev
+    for F in N_:  # fork-specific N_
+        if not C: TT += F.dTT; C += F.c; Rc += F.rc
+        if isinstance(F.Nt.N_[0],CF):  # H, top-down, eval sort_H?
+            if nH:
+                for Lev,lev in zip_longest(nH, reversed(F.Nt.N_)):  # align bottom-up
+                    if lev and lev.N_:
+                        if Lev: Lev += lev.N_
+                        else:   nH += [list(lev.N_)]
+            else: nH = [list(lev.N_) for lev in F.Nt.N_]
+        elif nH:  nH[0] += F.N_  # flat
+        else:     nH = [list(F.N_)]
     m,d = vt_(TT)
     Cx = CF if fCF else CN
     Ft = Cx(nF=nF, dTT=TT,m=m,d=d,c=C, rc=Rc/len(N_), root=root)
-    nH = [sum2F(n_,nF, Ft, fset=0, funpack=0) for n_ in reversed(nH)]  # reversed flat n_s
-    Ft.N_ = ([CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)] + nH) if nH else N_  # + top level
+    if nH:
+        Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)]
+        for n_ in nH:
+            tt,c,rc = np.zeros((2,9)),0,0
+            for n in N_: tt+=n.dTT; rc+=n.rc; c+=n.c
+            rc/=len(n_); m,d = vt_(tt,rc)
+            Ft.N_+= [CF(N_=n_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc,root=Ft)]
+    else: Ft.N_ = N_
     if fset:
         setattr(root, nF,Ft); root_update(root, Ft)
     return Ft
@@ -672,8 +670,7 @@ def add_F(F,f, cr=1, merge=1):
                 F.N_ = sum_H(H,h, cr,F)  # only for Fts
             else:
                 F.N_.extend(f.N_)  # always for levs
-    else:
-        F.N_.append(f)
+    else: F.N_.append(f)
 
 def merge_f(N,n, cc=1):
     for Ft, ft in zip((N.Nt, N.Bt, N.Ct, N.Lt), (n.Nt, n.Bt, n.Ct, n.Lt)):
