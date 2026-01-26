@@ -155,7 +155,7 @@ def cross_comp(root, rc, fL=0):  # core function mediating recursive rng+ and de
         for n in iN_: n.em, n.ed = vt_(np.sum([l.dTT for l in n.rim],axis=0), rc)
         cr = cd/(c+cd) *.5  # dfork borrow ratio, .5 for one direction
         if val_(TT, rc+connw, TTw(root), (len(L_)-1)*Lw,1, TTd,cr) > 0 or fL:
-            sum2F(L_,'Lt',root)  # Bt in dfork
+            sum2Ff(L_,'Lt',root)  # Bt in dfork
             E_ = get_exemplars({N for L in L_ for N in L.nt if N.em}, rc)  # exemplar N_|C_
             nG_,rc = cluster_N(root, E_,rc,fL)  # form Bt,Ct, sub+ in sum2G
         # agg+:
@@ -171,13 +171,14 @@ def trans_cluster(root, rc):  # trans_links mediate re-order in sort_H?
     def rroot(n): return rroot(n.root) if n.root and n.root != root else n  # root is nG
     FH_ = [[],[],[]]
     for L in root.L_:  # base links
-        for FH,Ft in zip(FH_, (L.Nt, L.Bt, L.Ct)):  # trans_links: [Nt,Bt,Ct]
+        for FH,Ft in zip(FH_, (getattr(L,'tNt',[]), getattr(L,'tBt',[]), getattr(L,'tCt',[]))):  # trans_links: [Nt,Bt,Ct]
+            if not Ft: continue
             for Lev,lev in zip_longest(FH, Ft.N_):  # always H?
                 if lev:
                     if Lev: Lev += lev.N_  # concat for sum2F
                     else:   FH += [list(lev.N_)]
     # merge tL_ nt roots
-    for FH, nF in zip(FH_, ('Nt','Bt','Ct')):
+    for FH, nF in zip(FH_, ('tNt','tBt','tCt')):
         if FH:  # merge Lt.fork.nt.roots
             for lev in reversed(FH):  # bottom-up to get incrementally higher roots
                 for tL in lev:  # trans_link
@@ -187,7 +188,8 @@ def trans_cluster(root, rc):  # trans_links mediate re-order in sort_H?
                     if not merge and rt0 is root: rt0,rt1 = rt1,rt0  # concat in higher G
                     add_N(rt0, rt1, merge)
             # set tFt:
-            FH = [sum2F(n_,nF,getattr(root.Lt, nF)) for n_ in FH]; sum2F(FH, nF, root.Lt)
+            if not hasattr(root, nF): setattr(root, nF, CF(nF=nF))  # init root.tFt
+            FH = [sum2F(n_,nF,getattr(root, nF)) for n_ in FH]; sum2F(FH, nF, root)
        # reval rc, not revised
         '''
         tL_ = [tL for n in root.N_ for l in n.L_ for tL in l.N_]  # trans-links
@@ -254,7 +256,7 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None):  # compare links, optional angl,
     Link = CN(typ=1,exe=1, nt=[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c),rc=rc, yx=yx,box=box,span=span,angl=angl, baseT=(_N.baseT+N.baseT)/2)
     for _Ft,Ft,nF in zip((_N.Nt,_N.Bt,_N.Ct),(N.Nt,N.Bt,N.Ct),('Nt','Bt','Ct')):
         if _Ft and Ft:  # add eval?
-            comp_F_(_Ft.N_,Ft.N_,nF,rc, Link)  # comp_F_, deeper trans_comp in comp_C_'comp_N, unpack|reref levs?
+            comp_F_(_Ft.N_,Ft.N_,'t'+nF,rc, Link)  # comp_F_, deeper trans_comp in comp_C_'comp_N, unpack|reref levs?
             rc += 1  # default fork redundancy
         for n, _n in (_N,N), (N,_N):  # if rim-mediated comp: reverse dir in _N.rim: rev^_rev?
             n.rim += [Link]; n.eTT += TT; n.ec += Link.c; n.compared.add(_n)
@@ -278,7 +280,7 @@ def comp_F_(_F_,F_,nF, rc, root):  # root is nG, unpack node trees down to numer
             if _N is N: dtt = np.array([N.dTT[1], np.zeros(9)]); TTm += dtt; C=1; Cd=0  # overlap is pure match
             else:       cm,cd = comp_n(_N,N, TTm,TTd,C,Cd,rc,L_); C+=cm; Cd+=cd
             Rc+=_N.rc+N.rc; cc += 1
-        if L_: setattr(root,nF, sum2F(L_,'nF',root,TTm, C, Rc/cc))
+        if L_: sum2Ff(L_,nF,root,TTm, C, Rc/cc)  # always flat tFt
     else:
         for _lev,lev in zip(_F_,F_):  # L_ = H
             rc += 1  # deeper levels are redundant
@@ -292,7 +294,7 @@ def comp_F_(_F_,F_,nF, rc, root):  # root is nG, unpack node trees down to numer
             rc=lRc/lcc; m,d = vt_(lTT,rc); TTm += lTT; C+=lC; Rc+=lRc; cc+=lcc
             L_ += [CF(N_=dN_,nF='tF',dTT=lTT,m=m,d=d,c=lC,rc=rc, root=root)]
         if L_:
-            rc=Rc/cc; m,d = vt_(TTm,rc); setattr(root,nF, CF(N_=L_,nF='tF',dTT=TTm,m=m,d=d,c=C,rc=rc, root=root))
+            rc=Rc/cc; m,d = vt_(TTm,rc); setattr(root,nF, CF(N_=L_,nF=nF,dTT=TTm,m=m,d=d,c=C,rc=rc, root=root))
 
 def base_comp(_N,N):  # comp Et, baseT, extT, dTT
 
@@ -356,7 +358,10 @@ def comp_C_(C_, rc,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s
         pairs = product(C_,_C_) if _C_ else combinations(C_,r=2)  # comp between | within list
         for _C, C in pairs:
             if _C is C: dtt = np.array([C.dTT[1],np.zeros(9)]); TTm+=dtt; cm=1;cd=0  # overlap=match
-            else:       dtt = base_comp(_C,C)[0]; TTm+=dtt; cm,cd = vt_(dtt,rc)
+            else:       
+                dtt = base_comp(_C,C)[0]; TTm+=dtt; cm,cd = vt_(dtt,rc)
+                dC = CN(nt=[_C,C], dTT=dtt, m=cm,d=cd,c=_C.c+C.c, span=np.hypot(*_C.yx-C.yx))  # we still need to create dC and pack it as rim?
+                _C.rim += [dC]; C.rim += [dC]
         if fC:
             _C_= C_; C_,exc_ = [],[]
             L_ = sorted(L_, key=lambda dC: dC.d)  # from min D
@@ -435,7 +440,7 @@ def cluster_N(root, _N_, rc, fL=0):  # flood-fill node | link clusters, flat, re
                 c = nc + lc + bc*br + cc*cr
                 tt = (nt*nc + lt*lc + bt*bc*br + ct*cc*cr) / c
                 if val_(tt,rc, TTw(root), (len(N_)-1)*Lw) > 0 or fL:
-                    G_ += [sum2G(((N_,nt,nc),(L_,lt,lc),(B_,bt,bc),(C_,ct,cc)), tt,c, rc,root)]  # calls sub+/ 3 forks, br,cr?
+                    G_ += [sum2G(Ft_, tt,c, rc,root)]  # calls sub+/ 3 forks, br,cr?  (it could be just Ft_ here?)
                     L__+=L_; TT+=tt; nTT+=nt; lTT+=lt; C+=c; nC+=nc; lC+=lc
                     # G.TT * cr * rcr?
         if G_ and (fL or val_(TT, rc+1, TTw(root), (len(G_)-1)*Lw)):  # include singleton lGs
@@ -553,9 +558,9 @@ def sum2C(N_,_C, _Ci=None):  # fuzzy sum params used in base_comp
 
 def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if not init
 
-    N_,ntt,nc = Ft_[0]; L_,ltt,lc = [],np.zeros((2,9)),0; B_,C_ = [],[]  # init tt,c s if B_
-    if len(Ft_)>1: L_,ltt,lc = Ft_[1]  # in trace_edge
-    if len(Ft_)>2: (B_,btt,bc),(C_,ctt,cc) = Ft_[2:]  # in cluster_N, Ct: alternative, Bt: complementary?
+    N_,ntt,nc,nr = Ft_[0]; L_,ltt,lc = [],np.zeros((2,9)),0; B_,C_ = [],[]  # init tt,c s if B_
+    if len(Ft_)>1: L_,ltt,lc,lr = Ft_[1]  # in trace_edge
+    if len(Ft_)>2: (B_,btt,bc,br),(C_,ctt,cc,cr) = Ft_[2:]  # in cluster_N, Ct: alternative, Bt: complementary?
     if not init:
         N_+=root.N_; L_+=root.L_; B_+=root.B_; C_+=root.C_
         nc+=root.Nt.c; lc+=root.Lt.c; bc+=root.Bt.c; cc+=root.Ct.c
@@ -565,11 +570,11 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     if typ is None: typ = N.typ
     m, d = vt_(tt, rc)
     G = Copy_(N,root,init=1,typ=typ); G.dTT=tt; G.m=m; G.d=d; G.c=c; G.rc=rc
-    if typ: G.Nt = sum2F(N_,'Nt',G, ntt, nc)
+    if N.typ: G.Nt = sum2F(N_,'Nt',G, ntt, nc)
     else:   m,d=vt_(ntt,rc); G.Nt = CF(N_=N_,nF='tF',dTT=ntt,m=m,d=d,c=nc,rc=rc,root=root)  # pack PP_
     for N in N_[1:]: add_N(G,N, coef=N.c/c)  # sum not-CF vars only?
     if L_:
-        G.Lt = sum2F(L_,'Lt',G,ltt,lc)
+        sum2Ff(L_,'Lt',G,ltt,lc,lr)
         A = np.sum([l.angl[0] for l in L_], axis=0)
         G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # angle dir = d sign
     if init:  # else same ext
@@ -590,8 +595,8 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
             G.L_ = L_
     if B_ and typ > 1 and G.Bt and G.Bt.d > avd * rc * nw:  # no ddfork
         B_,_rc = cross_comp(G, rc, fL=1)  # comp Bt.N_
-    if B_: sum2F(B_,'Bt',G, Rc=rc)  # maybe updated above
-    if C_: sum2F(C_,'Ct',G, Rc=rc)
+    if B_: sum2Ff(B_,'Bt',G)  # maybe updated above, recompute tt, c and r
+    if C_: sum2Ff(C_,'Ct',G,ctt,cc,cr)
     if fsub:
         if G.Lt.m * G.Lt.d * ((len(N_)-1)*Lw) > ave*avd * (rc+1) * cw:  # Variance * borrowed Match?
             V = G.m - ave * (rc+1)  # divisive clustering forks:
@@ -600,6 +605,17 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
             elif V > ave*connw: cluster_N(G,N_,rc+1)  # conn cluster/ higher filter: N_-> Nt.N_| N_
     G.rN_= sorted(G.rN_, key=lambda x: (x.m/x.c), reverse=True)  # only if lG?
     return G
+
+def sum2Ff(n_, nF,root, tt=None, c=None, rc=None, fset=1):  # sum2F flat
+    
+    if not c:
+        tt,c,rc = np.zeros((2,9)),0,0
+        for n in n_: tt+=n.dTT; rc+=n.rc; c+=n.c
+        rc/=len(n_)
+    m,d = vt_(tt,rc)    
+    ft = CF(N_=n_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc,root=root)
+    if fset: setattr(root, nF, ft)
+    return ft
 
 def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # always sum to Ft?
 
@@ -620,11 +636,7 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # always 
     Ft = Cx(nF=nF, dTT=TT,m=m,d=d,c=C, rc=Rc/len(N_), root=root)
     if nH:
         Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,root=Ft)]
-        for n_ in nH:
-            tt,c,rc = np.zeros((2,9)),0,0
-            for n in N_: tt+=n.dTT; rc+=n.rc; c+=n.c
-            rc/=len(n_); m,d = vt_(tt,rc)
-            Ft.N_+= [CF(N_=n_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc,root=Ft)]
+        for n_ in nH: Ft.N_+= [sum2Ff(n_,nF,Ft,fset=0)]
     else: Ft.N_ = N_
     if fset:
         setattr(root, nF,Ft); root_update(root, Ft)
@@ -723,7 +735,7 @@ def root_replace(root, rc, TT,C, N_,nTT,nc,L_,lTT,lc):
     root.dTT=TT; root.c=C; root.rc = rc  # not sure
     if hasattr(root,'wTT'): cent_TT(root, root.rc)
     sum2F(N_,'Nt',root, nTT,nc)
-    sum2F(L_,'Lt',root, lTT,lc)
+    sum2Ff(L_,'Lt',root, lTT,lc,rc)
 
 def CopyF(F, root=None, cr=1):  # F = CF|CN
     C = CF(dTT=F.dTT * cr, m=F.m, d=F.d, c=F.c, root=root or F.root)
@@ -902,7 +914,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                 nG_ = [PP2N(PPm) for PPm in PPm_]
                 for PPd in edge.link_: PP2N(PPd)
                 for nG in nG_:
-                    if nG.B_: sum2F([B.root for B in nG.B_],'Bt',nG,fset=1)
+                    if nG.B_: sum2Ff([B.root for B in nG.B_],'Bt',nG)
                 if val_(np.sum([n.dTT for n in nG_],0),3, TTw(tile), (len(PPm_)-1)*Lw) > 0:
                     G_, rc = trace_edge(nG_,3, tile, tT)  # flatten, cluster B_-mediated Gs, init Nt (we need to return G_)?
     if G_:
@@ -948,7 +960,7 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
     for n_,ntt,nc,l_,ltt,lc,merged in Gt_:
         if not merged:
             if vt_(TT,rc)[0] > ave*rc:  # include singletons
-                G_ += [sum2G(((n_,ntt,nc),(l_,ltt,lc)), TT,C,rc,root,fsub=0)]; nTT+=ntt; nC+=nc
+                G_ += [sum2G(((n_,ntt,nc,rc),(l_,ltt,lc,rc)), TT,C,rc,root,typ=2,fsub=0)]; nTT+=ntt; nC+=nc  # not sure on r
                 L_ += l_; lTT+=ltt; lC+=lc
             else:
                 for N in n_: N.fin=0; N.root=root
