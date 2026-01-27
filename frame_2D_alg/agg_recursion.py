@@ -75,7 +75,7 @@ class CN(CBase):
         n.em, n.ed, n.ec = kwargs.get('em',0),kwargs.get('ed',0),kwargs.get('ec',0)  # sum dTT
         n.eTT = kwargs.get('eTT',np.zeros((2,9)))  # sum rim dTT
         n.rc  = kwargs.get('rc', 1)  # redundancy to ext Gs, ave in links?
-        n.Nt, n.Bt, n.Ct, n.Lt = (kwargs.get(fork,CF()) for fork in ('Nt','Bt','Ct','Lt'))  # L.Lt is empty till comp L, convert to tFs?
+        n.Nt, n.Bt, n.Ct, n.Lt = (kwargs.get(fork,CF(root=n)) for fork in ('Nt','Bt','Ct','Lt'))  # L.Lt is empty till comp L, convert to tFs?
         # Fork tuple: [N_,dTT,m,d,c,rc,nF,root], N_ may be H: [N_,dTT] per level, nest=len(N_)
         n.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,A: not ders, in links for simplicity, mostly redundant
         n.nt    = kwargs.get('nt', [])  # nodet, links only
@@ -147,24 +147,24 @@ def TTw(G): return getattr(G,'wTT',wTTf)
 - Forward: extend cross-comp and clustering of top clusters across frames, re-order centroids by eigenvalues.
 - Feedback coords to bottom level or prior-level in parallel pipelines, filter updates in more coarse cycles 
 '''
-def cross_comp(Ft, root, rc, nF='Nt'):  # core function mediating recursive rng+ and der+ cross-comp and clustering
+def cross_comp(Ft, rc, nF='Nt'):  # core function mediating recursive rng+ and der+ cross-comp and clustering
 
-    N_ = Ft.N_; typ=N_[0].typ; nG_= []  # N_|B_|C_, root=G, rc=rdn+olp
-    iN_, L_,TT,c,TTd,cd = comp_N_(Ft.N_,rc) if typ else comp_C_(N_,rc, fC=1)  # nodes | links | centroids
+    N_ = Ft.N_[0].N_ if isinstance(Ft.N_[0], CF) else Ft.N_; typ=N_[0].typ; nG_= []  # N_|B_|C_, root=G, rc=rdn+olp
+    iN_, L_,TT,c,TTd,cd = comp_N_(N_,rc) if typ else comp_C_(N_,rc, fC=1)  # nodes | links | centroids
     if L_:
         for n in iN_: n.em, n.ed = vt_(np.sum([l.dTT for l in n.rim],axis=0), rc)
         cr = cd / (c+cd) * .5
         # dfork borrow ratio, .5 for one direction
-        if val_(TT,rc+connw, TTw(root), (len(L_)-1)*Lw,1, TTd,cr) > 0 or typ==1:
-            root.Lt = sum2f(L_,'Lt',root)  # no internal B_?
+        if val_(TT,rc+connw, TTw(Ft), (len(L_)-1)*Lw,1, TTd,cr) > 0 or typ==1:
+            if Ft.root: Ft.root.Lt = sum2f(L_,'Lt',Ft.root)  # no internal B_?
             E_ = get_exemplars({N for L in L_ for N in L.nt if N.em}, rc)  # exemplar N_|C_
-            nG_,rc = cluster_N(root, E_,rc, typ==1)  # form Bt,Ct, sub+ in sum2G
+            nG_,rc = cluster_N(Ft, E_,rc, typ==1)  # form Bt,Ct, sub+ in sum2G
         # agg+:
-        if nG_ and val_(root.dTT, rc+nw, TTw(root), (len(root.N_)-1)*Lw,1, TTd,cr) > 0:
-            nG_,rc = cross_comp(Ft,root,rc,nF)  # ini N_, trans-comp C_,!B_?
+        if nG_ and val_(Ft.dTT, rc+nw, TTw(Ft), (len(N_)-1)*Lw,1, TTd,cr) > 0 and rc<6:
+            nG_,rc = cross_comp(Ft,rc,nF)  # ini N_, trans-comp C_,!B_?
             for nG in nG_:
                 trans_cluster(nG,rc)  # splice trans_links, merge L.nt.roots
-        if nG_: sum2F(nG_,nF, root)
+        if nG_: sum2F(nG_,nF, Ft)
     return nG_, rc  # nG_ is recursion flag?
 
 def trans_cluster(root, rc):  # trans_links mediate re-order in sort_H?
@@ -284,7 +284,7 @@ def comp_F_(_F_,F_,nF, rc, root):  # root is nG, unpack node trees down to numer
             if _N is N: dtt = np.array([N.dTT[1], np.zeros(9)]); TTm += dtt; C=1; Cd=0  # overlap is pure match
             else:       cm,cd = comp_n(_N,N, TTm,TTd,C,Cd,rc,L_); C+=cm; Cd+=cd
             Rc+=_N.rc+N.rc; cc += 1
-        if L_: sum2f(L_,nF,root,TTm, C, Rc/cc)  # always flat tFt
+        if L_: sum2f(L_,nF,root)  # always flat tFt
     else:
         for _lev,lev in zip(_F_,F_):  # L_ = H
             rc += 1  # deeper levels are redundant
@@ -422,7 +422,7 @@ def cluster_N(root, _N_, rc, fL=0):  # flood-fill node | link clusters, flat, re
         for N in _N_: N.fin=0; N.exe=1  # not sure
         G_, L__= [],[]; TT,nTT,lTT = np.zeros((2,9)),np.zeros((2,9)),np.zeros((2,9)); C,nC,lC = 0,0,0; in_= set()  # root attrs
         for N in _N_: # form G per remaining N
-            if N.fin or (root.root and not N.exe): continue  # no exemplars in Fg
+            if N.fin or (root.root.root and not N.exe): continue  # no exemplars in Fg
             N_=[N]; L_,B_,C_=[],[],[]; N.fin=1  # init G
             __L_ = N.rim  # spliced rim
             while __L_:
@@ -453,7 +453,7 @@ def cluster_N(root, _N_, rc, fL=0):  # flood-fill node | link clusters, flat, re
                     # G.TT * cr * rcr?
         if G_ and (fL or val_(TT, rc+1, TTw(root), (len(G_)-1)*Lw)):  # include singleton lGs
             rc += 1
-            root_replace(root,rc, TT,C, G_,nTT,nC,L__,lTT,lC)
+            if root.root:  root_replace(root.root,rc, TT,C, G_,nTT,nC,L__)  # not sure
     return G_, rc
 
 def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround via rims of new member nodes, within root
@@ -580,7 +580,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     G = Copy_(N,root,init=1,typ=typ); G.dTT=tt; G.m=m; G.d=d; G.c=c; G.rc=rc
     for N in N_[1:]:
         add_N(G,N, coef=N.c/c)  # skips forks
-    if typ: G.Nt = sum2F(N_,'Nt',G,ntt,nc)
+    if N.typ: G.Nt = sum2F(N_,'Nt',G,ntt,nc)  # should be based on N.typ? When we sum PP into G, input typ is 2, but PP.typ is 0
     else:   m,d = vt_(ntt,nr); G.Nt = CF(N_=N_,nF='Nt',dTT=ntt,m=m,d=d,c=nc,rc=nr,root=G)
     if L_:
         m,d = vt_(ltt,lc); G.Lt = CF(N_=L_,nF='Lt',root=G,TT=ltt,m=m,d=d,c=lc,rc=lr)
@@ -593,12 +593,13 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     if N_[0].typ==2 and G.L_:  # else mang = 1
         G.mang = np.mean([comp_A(G.angl[0], l.angl[0])[0] for l in G.L_])
     G.m,G.d = vt_(G.dTT,rc)
-    for F_,nF,ftt,fc,fr,Ft,fB in (B_,'Bt',btt,bc,br,G.Bt,1), (C_,'Ct',ctt,cc,cr,G.Ct,0):
-        if F_:
-            if typ!=1 and (Ft.d > avd*fr*nw if fB else Ft.m > ave*fr*cw):  # no ddfork
-                cross_comp(Ft,fc, fL=fB)  # forms Bt|Ct
-            else:
-                m,d = vt_(ftt,fr); setattr(G, nF, CN(N_=B_,nF=nF,root=G,dTT=ftt,m=m,d=d,c=fc,rc=fr))
+    if B_:
+        for F_,nF,ftt,fc,fr,Ft,fB in (B_,'Bt',btt,bc,br,G.Bt,1), (C_,'Ct',ctt,cc,cr,G.Ct,0):
+            if F_:
+                if typ!=1 and (Ft.d > avd*fr*nw if fB else Ft.m > ave*fr*cw):  # no ddfork
+                    cross_comp(Ft,fc,nF)  # forms Bt|Ct
+                else:
+                    m,d = vt_(ftt,fr); setattr(G, nF, CN(N_=B_,nF=nF,root=G,dTT=ftt,m=m,d=d,c=fc,rc=fr))
     if G.m > ave*specw:  # comp typ -1 pre-links
         L_,pL_= [],[]; [L_.append(L) if L.typ==1 else pL_.append(L) for L in G.L_]
         if pL_:
@@ -657,13 +658,12 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # -> Ft
             else: H = [list(lev.N_) for lev in F.Nt.N_]
         elif H: H[0] += F.N_  # flat
         else:   H = [list(F.N_)]
-    m,d = vt_(TT)
-    Cx = CF if fCF else CN; rc = Rc / len(N_)
-    Ft = Cx(nF=nF,dTT=TT,m=m,d=d,c=C,rc=rc,root=root) # splice N_ H:
+    m,d = vt_(TT); rc = Rc / len(N_)
+    Ft = getattr(root,nF) if fset else CF(root=root) # splice N_ H:
+    Ft.N_=m; Ft.dTT=TT; Ft.m=m; Ft.d=d; Ft.c=C; Ft.rc=rc  
     if H: Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,rc=rc,root=Ft)] + [sum2f(n_,nF,Ft) for n_ in reversed(H)]
     else: Ft.N_ = N_
-    if fset:
-        setattr(root, nF,Ft); root_update(root, Ft)
+    if fset: root_update(root, Ft)
     return Ft
 
 def add_F(F,f, cr=1, merge=1):
@@ -735,12 +735,12 @@ def root_update(root, T):  # value attrs only?
         root.m = (root.m*_c+T.m*c) /C; root.d = (root.d*_c+T.d*c) /C
     if root.root: root_update(root.root, T)   # upward recursion, batch in root?
 
-def root_replace(root, rc, TT,C, N_,nTT,nc,L_,lTT,lc):
+def root_replace(root, rc, TT,C, N_,nTT,nc,L_):
 
     root.dTT=TT; root.c=C; root.rc = rc  # not sure
     if hasattr(root,'wTT'): cent_TT(root, root.rc)
     sum2F(N_,'Nt',root, nTT,nc)
-    sum2f(L_,'Lt',root, lTT,lc,rc)
+    sum2f(L_,'Lt',root)
 
 def CopyF(F, root=None, cr=1):  # F = CF|CN
     C = CF(dTT=F.dTT * cr, m=F.m, d=F.d, c=F.c, root=root or F.root)
@@ -909,7 +909,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                 for P in dP.nt: PP.rN_ += [P.root]  # PPm
         return PP
     # TT,C, G_,nTT,nC,L_,lTT,lC in trace_edge:
-    tT = [np.zeros((2,9)),0, [],np.zeros((2,9)),0, [],np.zeros((2,9)),0]
+    tT = [np.zeros((2,9)),0, [],np.zeros((2,9)),0, []]
     blob_, G_ = tile.N_, []
     for blob in blob_:
         if not blob.sign and blob.G > aveB:
@@ -971,8 +971,8 @@ def trace_edge(N_, rc, root, tT=[]):  # cluster contiguous shapes via PPs in edg
                 for N in n_: N.fin=0; N.root=root
     if val_(TT, rc+1, TTw(root), mw=1 if tT else (len(G_)-1)*Lw) > 0:
         if tT:  # concat in vect_edge
-            for i, par in enumerate((TT,C,G_,nTT,nC,L_,lTT,lC)): tT[i] += par
-        else: root_replace(root, rc, TT,C,G_,nTT,nC,L_,lTT,lC)
+            for i, par in enumerate((TT,C,G_,nTT,nC,L_)): tT[i] += par
+        else: root_replace(root, rc, TT,C,G_,nTT,nC,L_)
         rc += 1
     return G_, rc
 
@@ -983,7 +983,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9))):  # a
     def base_tile(y,x):  # 1st level, higher levels get Fg s
         Fg = frame_blobs_root( comp_pixel( image[y:y+Ly, x:x+Lx]), rV)
         Fg = vect_edge(Fg, rV)  # form, trace PP_
-        if Fg: cross_comp(Fg, rc=Fg.rc)
+        if Fg: cross_comp(Fg.Nt, rc=Fg.rc)
         return Fg
 
     def expand_lev(_iy,_ix, elev, Fg):  # seed tile is pixels in 1st lev, or Fg in higher levs
@@ -1023,7 +1023,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9))):  # a
         Fg_ = expand_lev(iY,iX, elev, Fg)
         if Fg_:  # higher-scope sparse tile
             frame = sum2G(Fg_, np.sum([fg.dTT for fg in Fg_],axis=0), sum([fg.c for fg in Fg_]), rc=1,root=frame,init=0)
-            if Fg and cross_comp(Fg, rc=elev)[0]:  # or val_? spec->tN_,tC_,tL_
+            if Fg and cross_comp(Fg.Nt, rc=elev)[0]:  # or val_? spec->tN_,tC_,tL_
                 frame.N_ = frame.N_+[Fg]; elev+=1  # forward comped tile
                 if max_elev == 4:  # seed, not from expand_lev
                     rV,wTTf = ffeedback(Fg)  # set filters
