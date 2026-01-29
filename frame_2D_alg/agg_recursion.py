@@ -114,7 +114,7 @@ class CF(CBase):
         F = CN(dTT=f.dTT, Lt=f.Lt, m=f.m, d=f.d, c=f.c, rc=f.rc, root=f.root, typ=4)
         F.nF = f.nF
         setattr(f.root, f.nF, F)  # update CN based Ft back to root
-        for N in F.N_:
+        for N in f.N_:  # sorry, should be f.N_ instead of F.N_ here
             N.root = F; F.Nt.N_ += [N]  # the rest of Nt is empty?
         return F
 
@@ -520,8 +520,9 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
         for n in [N for C in C_ for N in C.N_]:  # exemplar V + sum n match_dev to Cs, m* ||C rvals:
             n.exe = (n.d if n.typ==1 else n.m) + np.sum([m-ave*o for m, o in zip(n.m_, n.o_)]) - ave
         if val_(DTT, rc+olp, TTw(root), (len(C_)-1)*Lw) > 0:
-            Ct = sum2F(C_,'Ct',root, fCF=0)
-            _,rc = cross_comp(Ct.F2N(), rc)  # all distant Cs, seq C_ in eigenvector = argmax(root.wTT)?
+            Ct = sum2F(C_,'Ct',root)
+            # Ct maybe already converted in sum2G
+            _,rc = cross_comp(Ct.F2N() if isinstance(Ct, CF) else Ct, rc)  # all distant Cs, seq C_ in eigenvector = argmax(root.wTT)?
             root.C_=C_; root.Ct=Ct; root_update(root,Ct)
             Nt = sum2F(C_,'Nt',root); root.N_ = C_; root_update(root,Nt)
     return C_, rc
@@ -593,9 +594,8 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
             G.span = np.hypot(dy_,dx_).mean()  # N centers dist to G center
         else: L_+=root.L_; ltt+=root.Lt.dTT; lc+=root.Lt.c
         m, d = vt_(ltt,lr)
-        Nt = G.Nt.N_[0] if isinstance(G.Nt.N_[0], CF) else G.Nt
-        Nt.Lt = CF(N_=L_,nF='Lt',root=Nt,TT=ltt,m=m,d=d,c=lc,rc=lr)
-        A = np.sum([l.angl[0] for l in L_], axis=0)
+        G.Nt.Lt = CF(N_=L_,nF='Lt',root=G.Nt,TT=ltt,m=m,d=d,c=lc,rc=lr)
+        A = np.sum([l.angl[0] for l in L_], axis=0) if L_ else np.zeros(2)  # maintain 2 element array when L_ is empty
         G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # angle dir = d sign
     if N_[0].typ==2 and G.L_:  # else mang = 1
         G.mang = np.mean([comp_A(G.angl[0], l.angl[0])[0] for l in G.L_])
@@ -651,7 +651,7 @@ def sum2f(n_, nF,root):  # for flat n_
     rc /= len(n_); m,d = vt_(tt,rc)
     return CF(N_=n_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc,root=root)
 
-def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # -> Ft
+def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1):  # -> Ft  (fCF can be removed now)
 
     H = []  # unpack,concat,resum existing node'levs, sum,append to new N_'lev
     for F in N_:  # fork-specific N_
@@ -667,7 +667,7 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # -> Ft
         else:   H = [list(F.N_)]
     m,d = vt_(TT); rc = Rc / len(N_)
     Ft = getattr(root,nF) if fset else CF(root=root) # splice N_ H:
-    Ft.N_=m; Ft.dTT=TT; Ft.m=m; Ft.d=d; Ft.c=C; Ft.rc=rc
+    Ft.N_=N_; Ft.dTT=TT; Ft.m=m; Ft.d=d; Ft.c=C; Ft.rc=rc  # typo: Ft.N_ = N_
     if H: Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,rc=rc,root=Ft)] + [sum2f(n_,nF,Ft) for n_ in reversed(H)]
     else: Ft.N_ = N_
     if fset: root_update(root, Ft)
@@ -918,13 +918,14 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                 for g in g_:
                     if g.B_: g.Bt = sum2f([B.root for B in g.B_],'Bt',g)
                 if val_(np.sum([n.dTT for n in g_],0),3, TTw(tile), (len(PPm_)-1)*Lw) > 0:
-                    G_,TT,C = trace_edge(G_,g_,TT,C, 3,tile)  # flatten, cluster B_-mediated Gs, init Nt
+                    G_,TT,C = trace_edge(g_,TT,C, 3,tile)  # flatten, cluster B_-mediated Gs, init Nt
     if G_:
         setattr(tile,'Nt', sum2F(G_,'Nt',tile,TT,C,Rc=1))  # update tile.wTT?
         if vt_(tile.dTT)[0] > ave:
             return tile
 
-def trace_edge(N_,_G_,_TT,_C, rc,root):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
+# why we need _G_? We only need N_?
+def trace_edge(N_,_TT,_C, rc,root):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary/skeleton?
 
     L_, cT_, lTT, lc = [],set(),np.zeros((2,9)),0  # comp co-mediated Ns:
     for N in N_: N.fin = 0
@@ -964,8 +965,8 @@ def trace_edge(N_,_G_,_TT,_C, rc,root):  # cluster contiguous shapes via PPs in 
                 TT += ntt+ltt; C += nc+lc
             else:
                 for N in n_: N.fin=0; N.root=root
-    if val_(TT,rc+1,TTw(root)) > 0: _G_+=G_;_TT+=TT;_C+=C  # eval/edge?
-    return _G_,_TT,_C
+    if val_(TT,rc+1,TTw(root)) > 0: _TT+=TT;_C+=C  # eval/edge?  Why _G_ += G_? That's including PP into the G?
+    return G_,_TT,_C
 
 # frame expansion per level: cross_comp lower-window N_,C_, forward results to next lev, project feedback to scan new lower windows
 
