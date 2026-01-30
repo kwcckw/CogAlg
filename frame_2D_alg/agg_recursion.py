@@ -76,7 +76,7 @@ class CN(CBase):
         n.em, n.ed, n.ec = kwargs.get('em',0),kwargs.get('ed',0),kwargs.get('ec',0)  # sum dTT
         n.eTT = kwargs.get('eTT',np.zeros((2,9)))  # sum rim dTT
         n.rc  = kwargs.get('rc', 1)  # redundancy to ext Gs, ave in links?
-        n.Nt, n.Bt, n.Ct, n.Lt = (kwargs.get(fork,CN(root=n,Nt=CF(),Bt=CF(),Lt=CF(),Ct=CF())) for fork in ('Nt','Bt','Ct','Lt'))
+        n.Nt, n.Bt, n.Ct, n.Lt = ((kwargs.get(fork) if fork in kwargs else CN(root=n,Nt=CF(),Bt=CF(),Lt=CF(),Ct=CF())) for fork in ('Nt','Bt','Ct','Lt'))
         # Fork tuples, N_ may be H: [N_,dTT] levs, nest=len(N_), L.Lt is empty till comp L, convert to tFs?
         n.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,A: not ders, in links for simplicity, mostly redundant
         n.nt    = kwargs.get('nt', [])  # nodet, links only
@@ -399,7 +399,7 @@ def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL
                         add_N(rt0, rt1, merge)
                 # set tFt:
                 if not hasattr(Ft.root, nF): setattr(Ft.root, nF, CF(nF=nF))  # init root.tFt
-                FH = [sum2F(n_, nF, getattr(Ft.root, nF)) for n_ in FH]
+                FH = [sum2F(n_, nF, getattr(Ft.root, nF), fCF=1) for n_ in FH]  # looks like we only need fCF = 1 here
                 sum2F(FH, nF, Ft.root)
             ''' re-rc:
             tL_ = [tL for n in root.N_ for l in n.L_ for tL in l.N_]  # trans-links
@@ -439,8 +439,8 @@ def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL
                        [list(set(B_)),'Bt',np.zeros((2,9)),0,0],[list(set(C_)),'Ct',np.zeros((2,9)),0,0])
                 for i, (F_,_,tt,c,r) in enumerate(ft_):
                     for F in F_:
-                        tt += F.dTT; ft_[i][2] += F.c
-                        if i>1: ft_[i][3] += F.rc  # define Bt,Ct rc /= ave node rc?
+                        tt += F.dTT; ft_[i][3] += F.c  # index of 3 is c now
+                        if i>1: ft_[i][4] += F.rc  # define Bt,Ct rc /= ave node rc?
                 (_,_,nt,nc,_),(_,_,lt,lc,_),(_,_,bt,bc,br),(_,_,ct,cc,cr) = ft_
                 c = nc + lc + bc*br + cc*cr  # B_ and C_ are redundant
                 tt = (nt*nc + lt*lc + bt*bc*br + ct*cc*cr) / c
@@ -506,9 +506,10 @@ def cluster_C(root, E_, rc):  # form centroids by clustering exemplar surround v
         for n in [N for C in C_ for N in C.N_]:  # exemplar V + sum n match_dev to Cs, m* ||C rvals:
             n.exe = (n.d if n.typ==1 else n.m) + np.sum([m-ave*o for m, o in zip(n.m_, n.o_)]) - ave
         if val_(DTT, rc+olp, TTw(root), (len(C_)-1)*Lw) > 0:
-            Ct = sum2F(C_,'Ct',root, fCF=0)
+            Ct = sum2F(C_,'Ct',root)
             cross_comp(Ct,rc)  # all distant Cs, seq C_ in eigenvector = argmax(root.wTT)?
             root_update(root,Ct)  # no Nt=Ct, just Nt->Ct priority switch?
+            root.Nt.N_[0].Ct = Ct  # not sure on the level
     return C_, rc
 
 def cluster_P(_C_,N_,rc):  # Parallel centroid refining, _C_ from cluster_C, N_= root.N_, if global val*overlap > min
@@ -569,7 +570,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     G = Copy_(N,root,init=1,typ=typ); G.dTT=tt; G.m=m; G.d=d; G.c=c; G.rc=rc
     for N in N_[1:]:
         add_N(G,N, coef=N.c/c)  # skips forks
-    if N.typ: G.Nt = sum2F(N_,'Nt',G,ntt,nc,fset=0)
+    if N.typ: sum2F(N_,'Nt',G,ntt,nc)
     else:     m,d = vt_(ntt,nr); G.Nt = CF(N_=N_,nF='Nt',dTT=ntt,m=m,d=d,c=nc,rc=nr,root=G)
     if len(Ft_)>1:  # from trace_edge
         L_,_,ltt,lc,lr = Ft_[1]
@@ -588,9 +589,10 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
         if not init: F_+=gFt.N_; ftt+=gFt.dTT; fc+=gFt.c
         m,d = vt_(ftt,fr)
         Ft = CN(N_=F_,root=G,TT=ftt,m=m,d=d,c=fc,rc=fr); Ft.nF=nF
-        if typ!=1 and (d > avd*fr*nw if fB else m > ave*fr*cw):  # no ddfork
+        if d > avd*fr*nw if fB else m > ave*fr*cw:  # no ddfork (we dont have ddfork now?)
             cross_comp(Ft,fc,nF)  # forms complementary Bt | alternative Ct
-        else: setattr(G, nF, Ft)
+        GNt = G.Nt.N_[0] if isinstance(G.Nt.N_[0], CF) else G.Nt  # G.Nt always have at least 2 levels? If yes we can skip this step
+        setattr(G if nF == 'Bt' else GNt, nF, Ft)  # set Ct per G.Nt's level
     if G.m > ave*specw:  # comp typ -1 pre-links
         L_,pL_= [],[]; [L_.append(L) if L.typ==1 else pL_.append(L) for L in G.L_]
         if pL_:
@@ -605,7 +607,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
             V = G.m - ave * (rc+1)  # cent|conn divisive clustering:
             if mdecay(G.L_) > decay:
                 if V>ave*centw: cluster_C(G,N_,rc+1)  # cent cluster: N_->Ct.N_, higher than G.C_
-            elif V > ave*connw: cluster_N(G,N_,rc+1)  # conn cluster/ rc+1: N_-> Nt.N_| N_
+            elif V > ave*connw: cluster_N(G.Nt,N_,rc+1)  # conn cluster/ rc+1: N_-> Nt.N_| N_
     G.rN_= sorted(G.rN_, key=lambda x: (x.m/x.c), reverse=True)  # only if lG?
     return G
 
@@ -635,7 +637,7 @@ def sum2f(n_, nF,root):  # for flat n_
     rc /= len(n_); m,d = vt_(tt,rc)
     return CF(N_=n_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc,root=root)
 
-def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # -> Ft
+def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
 
     H = []  # unpack,concat,resum existing node'levs, sum,append to new N_'lev
     for F in N_:  # fork-specific N_
@@ -654,7 +656,7 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # -> Ft
     Ft.nF = nF  # splice N_ H:
     if H: Ft.N_ = [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,rc=rc,root=Ft)] + [sum2f(n_,nF,Ft) for n_ in reversed(H)]
     else: Ft.N_ = N_
-    if fset: root_update(root, Ft)
+    if fset: root_update(root, Ft); setattr(root, nF, Ft)  # we need update root.Ft when fset?
     return Ft
 
 def add_F(F,f, cr=1, merge=1):
@@ -724,7 +726,7 @@ def root_update(root, Ft):
         root.dTT = (root.dTT*_c + Ft.dTT*c) /C
     else:  # borrow alt-fork deviations:
         root.m = (root.m*_c+Ft.m*c) /C; root.d = (root.d*_c+Ft.d*c) /C
-    setattr(root, Ft.nT, Ft)
+    setattr(root, Ft.nF, Ft)  # typo?
     if root.root: root_update(root.root, Ft)   # upward recursion, batch in root?
 
 def CopyF(F, root=None, cr=1):  # F = CF|CN
@@ -902,7 +904,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                 for PPd in edge.link_: PP2N(PPd)
                 for N in N_:
                     if N.B_: N.Bt = sum2f([B.root for B in N.B_],'Bt',N)
-                if val_(np.sum([n.dTT for n in G_],0),3, TTw(tile), (len(PPm_)-1)*Lw) > 0:
+                if val_(np.sum([n.dTT for n in N_],axis=0),3, TTw(tile), (len(PPm_)-1)*Lw) > 0:
                     G_,TT,C = trace_edge(N_,G_,TT,C, 3,tile)  # flatten, cluster B_-mediated Gs, init Nt
     if G_:
         setattr(tile,'Nt', sum2F(G_,'Nt',tile,TT,C,Rc=1))  # update tile.wTT?
@@ -926,7 +928,7 @@ def trace_edge(N_,_G_,_TT,_C, rc,root):  # cluster contiguous shapes via PPs in 
     Gt_ = []
     for N in N_:  # flood-fill G per seed N
         if N.fin: continue
-        N.fin=1; _N_=[N]; Gt=[]; N.root=Gt; n_,ntt,nc, l_,ltt,lc = [N],np.zeros((2,9)),0,[],np.zeros((2,9)),0  # Gt
+        N.fin=1; _N_=[N]; Gt=[]; N.root=Gt; n_,ntt,nc, l_,ltt,lc = [N],N.dTT.copy(),N.c,[],np.zeros((2,9)),0  # Gt (ntt and nc should be init from N?)
         while _N_:
             _N = _N_.pop(0)
             for L in _N.rim:
@@ -944,7 +946,7 @@ def trace_edge(N_,_G_,_TT,_C, rc,root):  # cluster contiguous shapes via PPs in 
     G_, TT,C = [],np.zeros((2,9)),0
     for n_,ntt,nc,l_,ltt,lc,merged in Gt_:
         if not merged:
-            if vt_(TT,rc)[0] > ave*rc:  # wrap singletons too
+            if vt_(ntt+ltt,rc)[0] > ave*rc:  # wrap singletons too (we should use ntt + ltt here? That TT is empty)
                 G_ += [sum2G(((n_,'Nt',ntt,nc,rc),(l_,'Lt',ltt,lc,rc)), TT,C,rc,root,typ=2,fsub=0)]
                 TT += ntt+ltt; C += nc+lc
             else:
