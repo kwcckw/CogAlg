@@ -52,10 +52,10 @@ eps = 1e-7
 
 def prop_F_(F):  # factory function to set property+setter to get and update top-composition fork.N_
     def Nf_(N):  # CN Nt | Lt | Bt
-        Ft = getattr(N,F)
+        Ft = getattr(N,'Nt' if F == 'Ct' else F)
         if not Ft: return Ft
-        elif F=='Nt': return F.N_[-1][0]
-        elif F=='Ct': return F.N_[-1][1]
+        elif F=='Nt': return Ft.N_[-1][0]  # should be Ft here
+        elif F=='Ct': return Ft.N_[-1][1]
         else:  # Lt | Bt
             return Ft.N_[-1] if (Ft.N_ and isinstance(Ft.N_[0], CF)) else Ft
     def get(N): return getattr(Nf_(N),'N_')
@@ -65,9 +65,9 @@ def prop_F_(F):  # factory function to set property+setter to get and update top
 class CN(CBase):
     name = "node"
     # n.Ft.N_[-1] if n.Ft.N_ and isinstance(n.Ft.N_[-1],CF) else n.Ft.N_:
-    for F_,nF in zip(('N_','L_','B_'),('Nt','Lt','Bt')):  # Lt if converted CF?
-        F_ = prop_F_(nF) if getattr(n,nF) else []
-
+    # for F_,nF in zip(('N_','L_','B_'),('Nt','Lt','Bt')):  # Lt if converted CF?
+    #     F_ = prop_F_(nF) if getattr(n,nF) else []
+    N_, L_, C_, B_ = prop_F_('Nt'), prop_F_('Lt'), prop_F_('Ct'), prop_F_('Bt')  # we still need this since we need to access Nt's N_ by N_, Bt's N_ by B_ and Ct's N_ by C_
 
     def __init__(n, **kwargs):
         super().__init__()
@@ -222,9 +222,12 @@ def comp_N(_N,N, rc, A=np.zeros(2), span=None):  # compare links, optional angl,
     angl = [A, np.sign(TT[1] @ wTTf[1])]  # canonic direction
     m, d = vt_(TT,rc)
     Link = CN(typ=1,exe=1, nt=[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c),rc=rc, yx=yx,box=box,span=span,angl=angl, baseT=(_N.baseT+N.baseT)/2)
-    for _Ft,Ft,nF in zip((_N.Nt,_N.Bt),(N.Nt,N.Bt),('Nt','Bt')):
-        if _Ft and Ft:  # add eval?
-            comp_F_(_Ft.N_,Ft.N_,'t'+nF,rc, Link)  # comp_F_, deeper trans_comp in comp_C_'comp_N, unpack|reref levs?
+    
+    Nt_, Ct_ = zip(*N.Nt.N_) if N.Nt.N_ else [],[]  # unpack
+    _Nt_, _Ct_ = zip(_N.Nt.N_) if _N.Nt.N_ else [],[]
+    for _F_,F_,nF in zip((_Nt_,_N.Bt.N_, _Ct_),(Nt_,N.Bt.N_,Ct_),('Nt','Bt','Ct')):
+        if _F_ and F_:  # add eval?
+            comp_F_(_F_,F_,'t'+nF,rc, Link)  # comp_F_, deeper trans_comp in comp_C_'comp_N, unpack|reref levs?
             rc += 1  # default fork redundancy
         for n, _n in (_N,N), (N,_N):  # if rim-mediated comp: reverse dir in _N.rim: rev^_rev?
             n.rim += [Link]; n.eTT += TT; n.ec += Link.c; n.compared.add(_n)
@@ -582,7 +585,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     for N in N_[1:]:
         add_N(G,N, coef=N.c/c)  # skips forks
     if N.typ: sum2F(N_,'Nt',G,ntt,nc)
-    else:     m,d = vt_(ntt,nr); G.Nt = CF(N_=N_,nF='Nt',dTT=ntt,m=m,d=d,c=nc,rc=nr,root=G)
+    else:     m,d = vt_(ntt,nr); G.Nt = CF(N_=[[sum2f(N_,'Nt',G.Nt),CF()]],nF='Nt',dTT=ntt,m=m,d=d,c=nc,rc=nr,root=G)
     if len(Ft_) > 1:  # from trace_edge
         L_,_,ltt,lc,lr = Ft_[1]
         if init:  # else same ext
@@ -658,8 +661,8 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
                 for Lev,lev in zip_longest(H, F.Nt.N_):
                     if lev:
                         if Lev:
-                            for _ft,ft in zip_longest(Lev if ff else [Lev], lev if ff else [lev], fillvalue=CF()):
-                                _ft.N_ += ft.N_  #  concat nt,ct
+                            for _ft,ft in zip_longest(Lev if ff else [Lev], lev if ff else [lev]):  # no need fill? We must have 2 forks here
+                                if ft: _ft += ft.N_  #  concat nt,ct  (_ft in H is a list instead of CF)
                         else: H += [[list(ft.N_) for ft in lev] if ff else list(lev.N_)]
             else:
                 H = [[(list(ft.N_) if ft else []) for ft in lev] if ff else list(lev.N_) for lev in F.Nt.N_]
@@ -667,12 +670,14 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
     Ft = Cx(dTT=TT,m=m,d=d,c=C,rc=rc,root=root)
     Ft.nF = nF  # splice N_ H:
     if H:
-        Ft.N_ = [[sum2f(n_,nF,Ft) for n_ in lev] if ff else sum2f(lev,nF,Ft) for lev in H]
+        Ft.N_ = [[(sum2f(n_,nF,Ft) if n_ else CF()) for n_ in lev] if ff else sum2f(lev,nF,Ft) for lev in H]  # skip empty list
         topNt = CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,rc=rc,root=Ft)
         Ft.N_+= [[topNt,CF()]] if ff else [topNt]
     else:
         Ft.N_ = N_  # no C_ in lev0: init fsub=0?
-    if fset: root_update(root, Ft)
+    if fset: 
+        root_update(root, Ft)
+        if not fCF: Ft.Nt.c = Ft.c  # for eval emptiness, or eval emptiness with bool(c or N_)?
     return Ft
 
 def add_F(F,f, cr=1, merge=1):
@@ -747,7 +752,10 @@ def root_update(root, Ft, ini=1):
 
 def CopyF(F, root=None, cr=1):  # F = CF|CN
     C = CF(dTT=F.dTT * cr, m=F.m, d=F.d, c=F.c, root=root or F.root)
-    C.N_ = [CopyF(N) if isinstance(N,CF) else Copy_(N) for N in F.N_]
+    if not hasattr(F, 'nF') or (hasattr(F, 'nF') and F.nF == 'Nt'):  # Copy from N, must be Nt
+        C.N_ = [[CopyF(lev) if lev else CF() for lev in levt] for levt in F.N_]  # not sure yet
+    else:  # Not Nt, flat
+        C.N_ = [CopyF(N) if isinstance(N,CF) else Copy_(N) for N in F.N_]
     return C
 
 def Copy_(N, root=None, init=0, typ=None):
