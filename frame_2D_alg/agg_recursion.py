@@ -51,13 +51,18 @@ capitalized vars are summed small-case vars
 eps = 1e-7
 
 def prop_F_(F):  # factory function, sets property+setter to get and update top-composition fork.N_
+    
+    def topFt_(Ft):
+        return Ft.N_[-1] if (Ft.N_ and isinstance(Ft.N_[0], CF)) else Ft
+        
     def Nf_(N):  # CN Nt | Lt | Bt
-        Ft = getattr(N,'Nt' if F=='Ct' else F)
+        Ft = getattr(N,F)
         if not Ft: return Ft
-        elif F=='Nt': return Ft.N_[-1][0]
-        elif F=='Ct': return Ft.N_[-1][1]
-        else:  # Lt | Bt
-            return Ft.N_[-1] if (Ft.N_ and isinstance(Ft.N_[0], CF)) else Ft
+        elif isinstance(Ft, CN):
+            if F=='Nt': return topFt_(Ft) if Ft.typ < 5 else Nf_(Ft.N_[-1])
+            elif F=='Ct': return topFt_(Ft).Ct if Ft.typ < 5 else Nf_(Ft.N_[-1]).Ct
+        else:  # Lt | Bt 
+            return topFt_(Ft)
     def get(N): return getattr(Nf_(N),'N_')
     def set(N, new_N): setattr(Nf_(N),'N_',new_N)
     return property(get,set)
@@ -110,6 +115,7 @@ class CF(CBase):
         f.c  = kwargs.get('c', 0)
         f.rc = kwargs.get('rc',0)
         f.root = kwargs.get('root',None)
+        f.typ = 4  # not sure yet
     def __bool__(f): return bool(f.c)
 
 ave = .3; avd = ave*.5  # ave m,d / unit dist, top of filter specification hierarchy
@@ -248,14 +254,21 @@ def sub_comp(_N, N, rc, Link):  # root is nG, unpack node trees down to numerica
 def comp_Ft(_Ft, Ft, nF, rc, root):  # root is nG, unpack node trees down to numericals and compare them
 
     L_,TTm,C,TTd,Cd = [],np.zeros((2,9)),0,np.zeros((2,9)),0; Rc=cc=0  # comp count
-    # add eval for nested levs and Ct:
-    for _N, N in product(_Ft.N_,Ft.N_):  # top lev, spec eval in comp_n:
+
+    # add eval for nested levs and Ct: 
+    if Ft.typ <5 or _Ft.typ <5:
+        N_ = Ft.N_ if Ft.typ <5 else Ft.Nt.N_[0].N_  # if different level, get the first level of nested level?
+        _N_ = _Ft.N_ if _Ft.typ <5 else _Ft.Nt.N_[0].N_
+    else:
+        N_ = Ft.N_; _N_ = Ft.N_  # for nested level, it will be retrieved via prop_F
+        
+    for _N, N in product(_N_,N_):  # top lev, spec eval in comp_n:
         if _N is N: dtt = np.array([N.dTT[1], np.zeros(9)]); TTm += dtt; C=1; Cd=0  # overlap is pure match
         else:       cm,cd = comp_n(_N,N, TTm,TTd,C,Cd,rc,L_); C+=cm; Cd+=cd
         Rc += _N.rc+N.rc; cc += 1  # not edited
     if L_:
-        if Ft.N_[0].typ > 3: # N_=H, lev.typ=5 if nested
-            for _lev,lev in zip( reversed(_Ft.N_[:-1]), reversed(Ft.N_[:-1])):  # top-1 - down
+        if Ft.typ > 4 and _Ft.typ >4: # N_=H, lev.typ=5 if nested (only if both are nested with levels)
+            for _lev,lev in zip(reversed(_Ft.Nt.N_[:-1]),reversed(Ft.Nt.N_[:-1])):  # top-1 - down
                 TTm += comp_derT(_lev.dTT[1],lev.dTT[1]); C+=min(_lev.c,lev.c)  # lrc?
         sum2F(L_,'t'+nF, root, TTm,C, rc, fCF=1)  # rc is wrong
         # Rc/=cc; m,d=vt_(TTm,Rc); setattr(root,nF, CF(N_=L_,nF=nF,dTT=TTm,m=m,d=d,c=C,rc=Rc,root=root))
@@ -430,7 +443,7 @@ def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL
                         m,d = nt_vt(*L.nt)
                         if m > ave * (rc-1):  # cluster nt, L,C_ by combined rim density:
                             N_ += [_N]; _N.fin = 1
-                            L_ += [L]; C_ += _N.C_
+                            L_ += [L]; C_ += _N.rN_
                             _L_+= [l for l in _N.rim if l not in in_ and (l.nt[0].fin ^ l.nt[1].fin)]   # new frontier links, +|-?
                         elif d > avd * (rc-1): B_ += [L]  # contrast value, exclusive?
                 __L_ = list(set(_L_))
@@ -571,7 +584,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     for N in N_[1:]:
         add_N(G,N, coef=N.c/c)  # skips forks
     if N.typ: sum2F(N_,'Nt',G,ntt,nc)
-    else:     m,d = vt_(ntt,nr); G.Nt = CF(N_=[[sum2f(N_,'Nt',G.Nt),CF()]],nF='Nt',dTT=ntt,m=m,d=d,c=nc,rc=nr,root=G)
+    else:     m,d = vt_(ntt,nr); G.Nt = CF(N_=N_,nF='Nt',dTT=ntt,m=m,d=d,c=nc,rc=nr,root=G)  # should be flat now for PP
     if len(Ft_) > 1:  # from trace_edge
         L_,_,ltt,lc,lr = Ft_[1]
         if init:  # else same ext
@@ -604,7 +617,9 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
             V = G.m - ave * (rc+1)  # cent|conn divisive clustering:
             if mdecay(G.L_) > decay:
                 if V>ave*centw: cluster_C(G.Nt, N_,rc+1)  # cent cluster: N_->Ct.N_, higher than G.C_
-            elif V > ave*connw: cluster_N(G.Nt, N_,rc+1)  # conn cluster/ rc+1: N_-> Nt.N_| N_
+            elif V > ave*connw: 
+                Ft=G.Nt; G.Nt=CN(typ=5,dTT=Ft.dTT,c=Ft.c,rc=Ft.rc,root=G); G.Nt.nF=Ft.nF; G.Nt.N_=[Ft]; Ft.root=G.Nt  # add nesting
+                cluster_N(G.Nt, N_,rc+1)  # conn cluster/ rc+1: N_-> Nt.N_| N_
     G.rN_= sorted(G.rN_, key=lambda x: (x.m/x.c), reverse=True)  # only if lG?
     return G
 
@@ -614,7 +629,7 @@ def add_N(G, N, coef=1, merge=0):  # sum Fts if merge
     _c,c = G.c,N.c*coef; C=_c+c  # weigh contribution of intensive params
     if hasattr(G, 'm_'): G.rc = np.sum([o*coef for o in N.o_]); G.rN_+=N.rN_; G.m_+=N.m_; G.o_+=N.o_  # not sure
     if N.typ:  # not PP| Cent
-        if N.C_: G.C_+= N.C_; G.Ct.dTT += N.Ct.dTT*coef; G.Ct.c += N.Ct.c*coef  # flat? L_,B_ stay nested
+        if N.rN_: G.C_+= N.rN_; G.Ct.dTT += N.Ct.dTT*coef; G.Ct.c += N.Ct.c*coef  # flat? L_,B_ stay nested
         G.span = (G.span*_c+N.span*c*coef) / C * coef
         A,a = G.angl[0],N.angl[0]; A[:] = (A*_c+a*c*coef) /C * coef  # vect only
         if isinstance(G.yx, list): G.yx += [N.yx]  # weigh by C?
@@ -636,7 +651,7 @@ def sum2f(n_, nF,root):  # for flat n_
 
 def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
 
-    H = []  # unpack,concat,resum existing node'levs, sum,append to new N_'lev
+    H = []; typ = 0  # unpack,concat,resum existing node'levs, sum,append to new N_'lev
     for F in N_:  # fork N_, lev=Nt
         if not F.N_: continue
         if not C: TT += F.dTT; C += F.c; Rc += F.rc
@@ -644,6 +659,7 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
             if H: H[-1] += F.N_
             else: H = [list(F.N_)]
         else:
+            typ = 5
             if H:  # aligned bottom-up?
                 for Lev,lev in zip_longest(H, F.Nt.N_):
                     if lev:
@@ -651,7 +667,7 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
                         else: H += [list(lev.N_)]
             else: H = [list(lev.N_) for lev in F.Nt.N_]
     m,d = vt_(TT); rc = Rc/len(N_); Cx = (CN,CF)[fCF]
-    Ft = Cx(dTT=TT,m=m,d=d,c=C,rc=rc,root=root)
+    Ft = Cx(dTT=TT,m=m,d=d,c=C,rc=rc,root=root); Ft.typ = typ  # include default typ in CF?
     Ft.nF = nF
     if H: Ft.N_ = [sum2f(lev,nF,Ft) for lev in H] + [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,rc=rc,root=Ft)]  # top lev
     else: Ft.N_ = N_  # no C_ in lev0: init fsub=0?
