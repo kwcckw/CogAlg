@@ -53,7 +53,7 @@ eps = 1e-7
 def prop_F_(F):  # factory function, sets property+setter to get and update top-composition fork.N_
     def Nf_(N):  # CN Nt | Lt | Bt | Ct
         Ft = getattr(N,F)
-        if Ft: return Ft.N_ if Ft.typ==4 else Ft.N_[-1]
+        if Ft: return Ft if Ft.typ==4 else Ft.N_[-1]  # should be returning Ft as top level when typ == 4
         else:  return Ft
     def get(N): return getattr(Nf_(N),'N_')
     def set(N, new_N): setattr(Nf_(N),'N_',new_N)
@@ -372,7 +372,7 @@ def get_exemplars(N_, rc):  # multi-layer non-maximum suppression -> sparse seed
             break  # the rest of N_ is weaker, trace via rims
     return E_
 
-def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL_ with E_?
+def cluster_N(Ft, _N_, rc, fNest=0):  # flood-fill node | link clusters, flat, replace iL_ with E_?
 
     def nt_vt(n,_n):
         M, D = 0,0  # exclusive match, contrast
@@ -453,7 +453,7 @@ def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL
         if G_:
             for G in G_: trans_cluster(G)  # splice trans_links, merge L.nt.roots
             if val_(TT, rc+1, TTw(Ft), (len(G_)-1)*Lw):
-                sum2F(G_,Ft.nF, Ft.root,TT,C); rc+=1  # sub+, sum Rc? Ft.Lt is empty till cross_comp
+                sum2F(G_,Ft.nF, Ft.root,TT,C,fNest=fNest); rc+=1  # sub+, sum Rc? Ft.Lt is empty till cross_comp
     return G_, rc
 
 def cluster_C(Ft, E_, rc):  # form centroids by clustering exemplar surround via rims of new member nodes, within root
@@ -513,8 +513,7 @@ def cluster_C(Ft, E_, rc):  # form centroids by clustering exemplar surround via
             root = Ft.root
             Ct = sum2f(C_,'Ct',root)
             cross_comp(Ct,rc)  # all distant Cs, seq C_ in eigenvector = argmax(root.wTT)?
-            root_update(Ft,Ct)  # Nt|Ct priority eval?
-            root.Nt.N_[-1][1] = Ct
+            root_update(Ft,Ct,fNest=1)  # Nt|Ct priority eval?  (nesting should be default here for Ct?)
     return C_, rc
 
 def cluster_P(_C_,N_,rc):  # Parallel centroid refining, _C_ from cluster_C, N_= root.N_, if global val*overlap > min
@@ -575,7 +574,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     G = Copy_(N,root,init=1,typ=typ); G.dTT=tt; G.m=m; G.d=d; G.c=c; G.rc=rc
     for N in N_[1:]:
         add_N(G,N, coef=N.c/c)  # skips forks
-    if N.typ: sum2F(N_,'Nt',G,ntt,nc)
+    if N.typ: sum2F(N_,'Nt',G,ntt,nc,fCF=N.Nt.typ!=5)  # fCF shoud be false only if N is nested
     else:
         m,d = vt_(ntt,nr); lev0 = CF(N_=N_,nF='Nt',dTT=ntt,m=m,d=d,c=nc,rc=nr,root=G)
         G.Nt = CN(N_=[lev0], dTT=deepcopy(ntt),m=m,d=d,c=nc,rc=nr,root=G.Nt,nF='Nt',typ=4)  # PP
@@ -611,7 +610,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
             V = G.m - ave * (rc+1)  # cent|conn divisive clustering:
             if mdecay(G.L_) > decay:
                 if V>ave*centw: cluster_C(G.Nt, N_,rc+1)  # cent cluster: N_->Ct.N_, higher than G.C_
-            elif V > ave*connw: cluster_N(G.Nt, N_,rc+1)  # conn cluster/ rc+1: N_-> Nt.N_| N_
+            elif V > ave*connw: cluster_N(G.Nt, N_,rc+1,fNest=1)  # conn cluster/ rc+1: N_-> Nt.N_| N_  (update typ = 5 for nested structure)
     G.rN_= sorted(G.rN_, key=lambda x: (x.m/x.c), reverse=True)  # only if lG?
     return G
 
@@ -641,13 +640,13 @@ def sum2f(n_, nF,root):  # for flat n_
     rc /= len(n_); m,d = vt_(tt,rc)
     return CF(N_=n_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc,root=root)
 
-def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
+def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0, fNest=0):  # -> Ft
 
     H = []  # unpack,concat,resum existing node'levs, sum,append to new N_'lev
     for F in N_:  # fork N_, lev=Nt
         if not F.N_: continue
         if not C: TT += F.dTT; C += F.c; Rc += F.rc
-        if F.N_[0].typ==4:  # flat N_,| test/lev?
+        if F.Nt.N_[0].typ < 4:  # flat N_,| test/lev? (should be F.Nt.N_[0].typ < 4? It could be a node with typ == 2 for flat structure)
             if H: H[-1] += F.N_
             else: H = [list(F.N_)]
         else:
@@ -663,7 +662,7 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
     if H: Ft.N_ = [sum2f(lev,nF,Ft) for lev in H] + [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,rc=rc,root=Ft)]  # top lev
     else: Ft.N_ = N_  # no C_ in lev0: init fsub=0?
     if fset:
-        root_update(root, Ft)
+        root_update(root, Ft, fNest=fNest)
         if not fCF: Ft.Nt.c = Ft.c  # init only?
     return Ft
 
@@ -726,7 +725,7 @@ def mdecay(L_):  # slope function
     ddist_ = np.diff([l.span for l in L_])
     return -(dm_ / (ddist_ + eps)).mean()  # -dm/ddist
 
-def root_update(root, Ft, ini=1):
+def root_update(root, Ft, ini=1, fNest=0):
 
     _c,c = root.c,Ft.c; C = _c+c; root.c = C  # c is not weighted, min(_lev.c,lev.c) if root is link?
     root.rc = (root.rc*_c + Ft.rc*c) / C
@@ -735,7 +734,11 @@ def root_update(root, Ft, ini=1):
     else:  # borrow alt-fork deviations:
         root.m = (root.m*_c+Ft.m*c) /C; root.d = (root.d*_c+Ft.d*c) /C
     if ini:
-        if root.typ==4: root.Nt = sum2F(root.N_,root.nF,root, fCF=0)  # convert to CN, add nesting
+        # root could be G or Ft
+        if (root.typ==4 or root.Nt.typ == 4) and fNest: 
+            ft0 = root.Nt; N_ = [ft0] + [sum2f(Ft.N_)] if Ft.typ ==4 else Ft.N_
+            dTT = ft0.dTT + Ft.dTT; c = ft0.c + Ft.c; rc = ft0.rc + Ft.rc; m, d = vt_(dTT,rc) 
+            Ft = CN(typ=5,N_=N_,dTT=dTT,m=m,d=d,c=c,rc=rc,root=root); Ft.nF = ft0.nF  # convert to CN, add nesting
         setattr(root, Ft.nF, Ft)
     if root.root: root_update(root.root, Ft, ini=0)   # upward recursion, batch in root?
 
@@ -921,7 +924,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                 if val_(np.sum([n.dTT for n in N_],axis=0),3, TTw(tile), (len(PPm_)-1)*Lw) > 0:
                     G_,TT,C = trace_edge(N_,G_,TT,C, 3,tile)  # flatten, cluster B_-mediated Gs, init Nt
     if G_:
-        setattr(tile,'Nt', sum2F(G_,'Nt',tile,TT,C,Rc=1))  # update tile.wTT?
+        setattr(tile,'Nt', sum2F(G_,'Nt',tile,TT,C,Rc=1,fCF=1))  # update tile.wTT? N_ must be flat here, so fCF = 1
         if vt_(tile.dTT)[0] > ave:
             return tile
 
