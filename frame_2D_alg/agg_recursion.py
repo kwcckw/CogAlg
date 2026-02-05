@@ -53,7 +53,7 @@ eps = 1e-7
 def prop_F_(F):  # factory function, sets property+setter to get and update top-composition fork.N_
     def Nf_(N):  # CN Nt | Lt | Bt | Ct
         Ft = getattr(N,F)
-        if Ft: return Ft if Ft.typ==4 else Ft.N_[-1]
+        if Ft: return Ft if Ft.typ==4 else (Ft.Nt.N_[-1] if isinstance(Ft, CN) else Ft.N_[-1])
         else:  return Ft
     def get(N): return getattr(Nf_(N),'N_')
     def set(N, new_N): setattr(Nf_(N),'N_',new_N)
@@ -66,6 +66,7 @@ class CN(CBase):
     def __init__(n, **kwargs):
         super().__init__()
         n.typ = kwargs.get('typ', 0)
+        n.nF = kwargs.get('nF', 'Nt')  # to set attr in root_update
         # 0=PP: block trans_comp, etc?
         # 1= L: typ,nt,dTT, m,d,c,rc, root,rng,yx,box,span,angl,fin,compared, Nt,Bt,Ct from comp_sub, tNt,tBt,tCt from comp_F_
         # 2= G: + rim, eTT, em,ed,ec, baseT,mang,sub,exe
@@ -77,7 +78,7 @@ class CN(CBase):
         n.em, n.ed, n.ec = kwargs.get('em',0),kwargs.get('ed',0),kwargs.get('ec',0)  # sum dTT
         n.eTT = kwargs.get('eTT',np.zeros((2,9)))  # sum rim dTT
         n.rc  = kwargs.get('rc', 1)  # redundancy to ext Gs, ave in links?
-        n.Nt, n.Bt, n.Lt = ((kwargs.get(fork) if fork in kwargs else CN(root=n,Nt=CF(),Bt=CF(),Lt=CF()) for fork in ('Nt','Bt','Lt')))
+        n.Nt, n.Bt, n.Lt = ((kwargs.get(fork) if fork in kwargs else CN(root=n,Nt=CF(),Bt=CF(),Lt=CF(),nF=fork) for fork in ('Nt','Bt','Lt')))
         # ini fork tuples, ->CN with nesting, L.Lt if comp L, Ct in CF only?
         n.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,A: not ders, in links for simplicity, mostly redundant
         n.nt    = kwargs.get('nt', [])  # nodet, links only
@@ -108,7 +109,7 @@ class CF(CBase):  # if flat N_, nF, and no forks?
         f.d  = kwargs.get('d', 0)
         f.c  = kwargs.get('c', 0)
         f.rc = kwargs.get('rc',0)
-        f.typ = 4
+        f.typ = kwargs.get('typ',4)
         f.root = kwargs.get('root',None)
     def __bool__(f): return bool(f.c)
 
@@ -265,9 +266,11 @@ def comp_Ft(_Ft, Ft, nF, rc, root):  # root is nG, unpack node trees down to num
                 dlev = CF(dTT=ltt,m=m,d=d,c=lc,rc=lrc, nF='tCt',root=root)
                 if _lev.Ct and lev.Ct:
                     comp_Ft(_lev.Ct,lev.Ct,'Ct', rc, root=dlev)  # set dlev.Ct, root_update
-                dH += [dlev]; Rc+=lrc
+                dH += [dlev]; Rc+=lrc  # dlev's N_ is empty?
                 # top-down?
-        root_update(root, CN(N_=dH, nF=nF, root=root, dTT=deepcopy(TTm),c=C, rc=Rc/len(dH), typ=5))  # no sum2F: higher levs are redundant?
+        # CN doesn't have nF, add it as default param in CN?
+        tFt = CN(nF=nF, root=root, dTT=deepcopy(TTm),c=C, rc=Rc/len(dH),Nt=CF(typ=4),typ=5); tFt.Nt.N_ = dH; tFt.nF=nF
+        root_update(root,tFt)  # no sum2F: higher levs are redundant?
 
 def base_comp(_N,N):  # comp Et, baseT, extT, dTT
 
@@ -385,15 +388,16 @@ def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL
             elif l.d > 0: D += l.d
         return M, D
     # not updated:
-    def trans_cluster(Ft): # trans_links mediate re-order in sort_H?
+    def trans_cluster(G): # trans_links mediate re-order in sort_H?
         FH_ = [[],[],[]]  # draft:
-        for L in Ft.L_:  # splice trans_links from base links
+        for L in G.Nt.L_:  # splice trans_links from base links
             for FH, Ft in zip(FH_, (getattr(L,'tNt',[]),getattr(L,'tBt',[]),getattr(L,'tCt',[]))):  # or no separate tBt, complemented only?
                 if Ft:
                     if isinstance(Ft.N_[0], CF):
                         for Lev, lev in zip_longest(FH, Ft.N_):
                             if lev:
                                 if Lev: Lev += lev.N_  # concat for sum2F
+                                else:   FH[:] = [copy(lev.N_)]
                             else:  FH += [list(lev.N_)]
                     else:          FH[0] += Ft.N_
         # merge tL_ nt roots:
@@ -403,7 +407,8 @@ def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL
                     for tL in lev:  # trans_link
                         rt0 = tL.nt[0].root; rt1 = tL.nt[1].root
                         if rt0 is rt1: continue
-                        merge = rt0 is Ft == rt1 is Ft  # else append
+                        # not quite sure on the Ft below, suppose it should be input G.Ft?
+                        merge = rt0 is Ft == rt1 is Ft  # else append ()
                         if not merge and rt0 is Ft: rt0, rt1 = rt1,rt0  # concat in higher G
                         add_N(rt0, rt1, merge)
                 # set tFt:
@@ -581,7 +586,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     if N.typ: sum2F(N_,'Nt',G,ntt,nc,fCF=N.Nt.typ!=5)
     else:
         m,d = vt_(ntt,nr); lev0 = CF(N_=N_,nF='Nt',dTT=ntt,m=m,d=d,c=nc,rc=nr,root=G)
-        G.Nt = CN(dTT=deepcopy(ntt),m=m,d=d,c=nc,rc=nr,root=G.Nt,nF='Nt',typ=4); G.Nt.N_=[lev0]  # PP
+        G.Nt = CN(dTT=deepcopy(ntt),m=m,d=d,c=nc,rc=nr,root=G.Nt,nF='Nt',Nt=CF(c=nc,typ=5),typ=5); G.Nt.Nt.N_=[lev0]  # PP (typ should be 5 since we nest it here with single level?)
     if len(Ft_) > 1:  # from trace_edge
         L_,_,ltt,lc,lr = Ft_[1]
         if init:  # else same ext
@@ -650,19 +655,19 @@ def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
     for F in N_:  # fork N_, lev=Nt
         if not F.N_: continue
         if not C: TT += F.dTT; C += F.c; Rc += F.rc
-        if F.typ==4:  # flat N_
+        if F.Nt.typ==4:  # flat N_
             if H: H[-1] += F.N_
             else: H = [list(F.N_)]
         else:
             if H:  # aligned bottom-up?
-                for Lev,lev in zip_longest(H, F.Nt.N_):
+                for Lev,lev in zip_longest(H, F.Nt.Nt.N_):
                     if lev:
                         if Lev: Lev += lev.N_  # keep lev nesting if any, separate concat for lev.Ct.N_?
                         else: H += [list(lev.N_)]
-            else: H = [list(lev.N_) for lev in F.Nt.N_]
+            else: H = [list(lev.N_) for lev in F.Nt.Nt.N_]
     m,d = vt_(TT); rc = Rc/len(N_)
     Ft = (CN,CF)[fCF](dTT=TT,m=m,d=d,c=C,rc=rc,root=root,typ=4 if fCF else 5); Ft.nF = nF
-    Ft.nF = nF
+    if not fCF: Ft.Nt = CF(typ=5)
     if H: Ft.N_ = [sum2f(lev,nF,Ft) for lev in H] + [CF(N_=N_,nF=nF,dTT=TT,m=m,d=d,c=C,rc=rc,root=Ft)]  # top lev
     else: Ft.N_ = N_  # no C_ in lev0: init fsub=0?
     if fset:
@@ -733,16 +738,17 @@ def root_update(root, Ft, ini=1):
 
     _c,c = root.c,Ft.c; C = _c+c; root.c = C  # c is not weighted, min(_lev.c,lev.c) if root is link?
     root.rc = (root.rc*_c + Ft.rc*c) / C
-    if isinstance(root,CF) or Ft.nF=='Nt' or Ft.nF=='Lt':  # core forks
+    if isinstance(root,CF) or (hasattr(Ft, 'nF') and (Ft.nF=='Nt' or Ft.nF=='Lt')):  # core forks
         root.dTT = (root.dTT*_c + Ft.dTT*c) /C
     else:  # borrow alt-fork deviations:
         root.m = (root.m*_c+Ft.m*c) /C; root.d = (root.d*_c+Ft.d*c) /C
     if ini:
         if root.Nt.typ==4:
-            ft0 = root.Nt; N_ = [ft0] + [sum2f(Ft.N_)] if Ft.typ ==4 else Ft.N_
+            ft0 = root.Nt; ft1 = sum2f(Ft.N_,ft0.nF,Ft)
+            N_ = [ft0, ft1] if Ft.typ ==4 else Ft.N_
             dTT = ft0.dTT + Ft.dTT; c = ft0.c + Ft.c; rc = ft0.rc + Ft.rc; m, d = vt_(dTT,rc)
-            Ft = CN(typ=5,N_=N_,dTT=dTT,m=m,d=d,c=c,rc=rc,root=root); Ft.nF = ft0.nF  # convert to CN, add nesting
-        setattr(root, Ft.nF, Ft)
+            Ft = CN(typ=5, dTT=dTT,m=m,d=d,c=c,rc=rc,Nt=CF(typ=5),root=root); Ft.Nt.N_=N_; Ft.nF = ft0.nF; ft0.root=Ft; ft1.root=Ft  # convert to CN, add nesting  (update root to new Ft reference)
+        setattr(root,'t'+Ft.nF if root.typ == 1 else Ft.nF, Ft)
     if root.root: root_update(root.root, Ft, ini=0)   # upward recursion, batch in root?
 
 def CopyF(F, root=None, cr=1):  # F = CF|CN
@@ -762,7 +768,9 @@ def Copy_(N, root=None, init=0, typ=None):
     if typ:
         for attr in ['fin','span','mang','sub','exe']: setattr(C,attr, getattr(N,attr))
         for attr in ['nt','baseT','box','rim','compared']: setattr(C,attr, copy(getattr(N,attr)))
-        for attr in ['Nt','Lt','Bt']: setattr(C,attr, CopyF(getattr(N,attr)))
+        for attr in ['Nt','Lt','Bt']: 
+            Ft = getattr(N,attr)
+            setattr(C,attr, CopyF(Ft) if isinstance(Ft, CF) else Copy_(Ft,init=3))
         if init:  # new G
             C.rim = []; C.em = C.ed = 0
             C.yx = [N.yx]; C.angl = np.array([copy(N.angl[0]), N.angl[1]],dtype=object)  # to get mean
@@ -775,6 +783,7 @@ def Copy_(N, root=None, init=0, typ=None):
             C.eTT = deepcopy(N.eTT); C.em,C.ed,C.ec = N.em,N.ed,N.ec
     if init==2:
         for n in C.N_: n.m_=[]; n._m_=[]; n.o_=[]; n._o_=[]
+    elif init == 3: C.nF = N.nF  # level N
     return C
 
 def extend_box(_box, box):
@@ -903,7 +912,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                          np.array([dM, dD, dL, dI, dG, dA, dL, dL / 2, eps])])
         y,x,Y,X = box; dy,dx = Y+1-y, X+1-x
         A = np.array([np.array(A), np.sign(dTT[1] @ wTTf[1])], dtype=object)  # append sign
-        PP = CN(typ=0, N_=P_,L_=L_,B_=B_,dTT=dTT,m=m,d=d,c=c, baseT=baseT,box=box,yx=yx,angl=A,span=np.hypot(dy/2,dx/2))  # set root in trace_edge
+        PP = CN(typ=0, dTT=dTT,m=m,d=d,c=c, baseT=baseT,box=box,yx=yx,angl=A,span=np.hypot(dy/2,dx/2))  # set root in trace_edge
         m_, d_ = np.zeros(6), np.zeros(6)
         for B in B_: m_ += B.verT[0]; d_ += B.verT[1];
         ad_ = np.abs(d_); t_ = m_ + ad_ + eps  # ~ max comparand
