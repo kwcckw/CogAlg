@@ -50,19 +50,8 @@ capitalized vars are summed small-case vars
 '''
 eps = 1e-7
 
-def prop_F_(F):  # factory function, sets property+setter to get and update top-composition fork.N_
-    def Nf_(N):  # CN Nt | Lt | Bt | Ct
-        Ft = getattr(N,F)
-        if Ft: return Ft if Ft.typ==4 else (Ft.Nt.N_[-1] if isinstance(Ft, CN) else Ft.N_[-1])
-        else:  return Ft
-    def get(N): return getattr(Nf_(N),'N_')
-    def set(N, new_N): setattr(Nf_(N),'N_',new_N)
-    return property(get,set)
-
 class CN(CBase):
     name = "node"
-    N_,C_, B_,L_ = prop_F_('Nt'),prop_F_('Ct'), prop_F_('Bt'), prop_F_('Lt')
-    # ext| int- defined nodes, ext|int- defining links, Lt/Ft, Ct/lev, Bt/G
     def __init__(n, **kwargs):
         super().__init__()
         n.typ = kwargs.get('typ', 0)
@@ -71,7 +60,6 @@ class CN(CBase):
         # 1= L: typ,nt,dTT, m,d,c,rc, root,rng,yx,box,span,angl,fin,compared, Nt,Bt,Ct from comp_sub, tNt,tBt,tCt from comp_F_
         # 2= G: + rim, eTT, em,ed,ec, baseT,mang,sub,exe
         # 3= Cn: + m_,d_,r_,o_ in C.rN_
-        # 5= Ft if nested, Lt, nF, Ct if flat Nt.lev
         n.m,  n.d, n.c = kwargs.get('m',0), kwargs.get('d',0), kwargs.get('c',0)  # sum forks to borrow
         n.dTT = kwargs.get('dTT',np.zeros((2,9)))  # Nt+Lt dTT: m_,d_ [M,D,n, I,G,a, L,S,A]
         n.rim = kwargs.get('rim',[])  # external links, rng-nest?
@@ -93,23 +81,25 @@ class CN(CBase):
         n.exe = kwargs.get('exe',0)  # exemplar, temporary
         n.rN_ = kwargs.get('rN_',[]) # reciprocal root nG_ for bG | cG, nG has Bt.N_,Ct.N_ instead
         n.compared = set()
+        @property
+        def N_(n): return n.Nt.N_ if n.Nt else []
+        @N_.setter
+        def N_(n, value):
+            if n.Nt: n.Nt.N_ = value
         # ftree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
     def __bool__(n): return bool(n.c)
 
-class CF(CBase):  # if flat N_, nF, and no forks?
+class CF(CBase):  # Nt,Ct, Bt,Lt: ext|int- defined nodes, ext|int- defining links, Lt/Ft, Ct/lev, Bt/G
     name = "fork"
     def __init__(f, **kwargs):
         super().__init__()
-        f.nF = kwargs.get('nF','')  # 'Nt','Lt','Bt','Ct'
-        f.N_ = kwargs.get('N_',[])  # flat, CN if nested
+        f.nF = kwargs.get('nF','')
+        f.N_ = kwargs.get('N_',[])  # flat
+        f.H  = kwargs.get('H', [])  # CF levs
         f.Lt = kwargs.get('Lt',[])  # from Ft cross_comp
         f.Ct = kwargs.get('Ct',[])  # if flat Nt.lev
         f.dTT= kwargs.get('dTT',np.zeros((2,9)))
-        f.m  = kwargs.get('m', 0)
-        f.d  = kwargs.get('d', 0)
-        f.c  = kwargs.get('c', 0)
-        f.rc = kwargs.get('rc',0)
-        f.typ = kwargs.get('typ',4)
+        f.m, f.d, f.c, f.rc = [kwargs.get(x, 0) for x in ('m','d','c','rc')]
         f.root = kwargs.get('root',None)
     def __bool__(f): return bool(f.c)
 
@@ -165,7 +155,7 @@ def cross_comp(Ft, rc, nF='Nt'):  # core function mediating recursive rng+ and d
             E_ = get_exemplars({N for L in L_ for N in L.nt if N.em}, rc)  # N|C?
             G_,rc = cluster_N(Ft, E_,rc)  # form Bt, trans_cluster, sub+ in sum2G
             if G_:
-                Ft = sum2F(G_,nF,Ft)
+                Ft = sum2F(G_,nF, Ft)
                 if val_(Ft.dTT, rc+nw, TTw(Ft), (len(N_)-1)*Lw,1, TTd,cr) > 0:
                     G_,rc = cross_comp(Ft,rc,nF)  # agg+,trans-comp
     return G_,rc  # G_ is recursion flag?
@@ -268,8 +258,7 @@ def comp_Ft(_Ft, Ft, nF, rc, root):  # root is nG, unpack node trees down to num
                     comp_Ft(_lev.Ct,lev.Ct,'Ct', rc, root=dlev)  # set dlev.Ct, root_update
                 dH += [dlev]; Rc+=lrc  # dlev's N_ is empty?
                 # top-down?
-        # CN doesn't have nF, add it as default param in CN?
-        tFt = CN(nF=nF, root=root, dTT=deepcopy(TTm),c=C, rc=Rc/len(dH),Nt=CF(typ=4),typ=5); tFt.Nt.N_ = dH; tFt.nF=nF
+        tFt = CN(nF=nF, root=root, dTT=deepcopy(TTm),c=C, rc=Rc/len(dH), Nt=CN(N_=dH, typ=5),typ=5)
         root_update(root,tFt)  # no sum2F: higher levs are redundant?
 
 def base_comp(_N,N):  # comp Et, baseT, extT, dTT
@@ -649,7 +638,27 @@ def sum2f(n_, nF,root):  # for flat n_
     rc /= len(n_); m,d = vt_(tt,rc)
     return CF(N_=n_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc,root=root)
 
-def sum2F(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
+def sum2F(N_, nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1):  # -> CF
+    def sum_H(N_):
+        H = []
+        for N in N_:
+            for Lev,lev in zip_longest(H, N.H):
+                if lev:
+                    if Lev: Lev[0] += lev.N_; Lev[1] = [sL+sl for sL,sl in zip(Lev[1],lev.H)]  # not sure, use nested sum_H?
+                    else: H += [list(lev.N_), list(lev.H)]
+        return [sum2F(lev) for lev in H[0] + H[1]]
+        # partly wrong
+    if not C:
+        TT = np.zeros((2,9)); C = 0; Rc = 0
+        for n in N_: TT += n.dTT; C += n.c; Rc += n.rc
+    rc = (Rc/len(N_)) if N_ else 1; m,d = vt_(TT,rc)
+    Ft = CF(N_=list(N_), nF=nF, dTT=TT, m=m, d=d, c=C, rc=rc, root=root)
+    Ft.H = sum_H(N_)
+    if fset:
+        root_update(root, Ft)
+    return Ft
+
+def sum2F_old(N_,nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=0):  # -> Ft
 
     H = []  # unpack,concat,resum existing node'levs, sum,append to new N_'lev
     for F in N_:  # fork N_, lev=Nt
@@ -747,7 +756,8 @@ def root_update(root, Ft, ini=1):
             ft0 = root.Nt; ft1 = sum2f(Ft.N_,ft0.nF,Ft)
             N_ = [ft0, ft1] if Ft.typ ==4 else Ft.N_
             dTT = ft0.dTT + Ft.dTT; c = ft0.c + Ft.c; rc = ft0.rc + Ft.rc; m, d = vt_(dTT,rc)
-            Ft = CN(typ=5, dTT=dTT,m=m,d=d,c=c,rc=rc,Nt=CF(typ=5),root=root); Ft.Nt.N_=N_; Ft.nF = ft0.nF; ft0.root=Ft; ft1.root=Ft  # convert to CN, add nesting  (update root to new Ft reference)
+            Ft = CN(typ=5, dTT=dTT,m=m,d=d,c=c,rc=rc,Nt=CF(typ=5),root=root); Ft.Nt.N_=N_; Ft.nF = ft0.nF; ft0.root=Ft; ft1.root=Ft
+            # convert to CN, add nesting  (update root to new Ft reference)
         setattr(root,'t'+Ft.nF if root.typ == 1 else Ft.nF, Ft)
     if root.root: root_update(root.root, Ft, ini=0)   # upward recursion, batch in root?
 
@@ -768,7 +778,7 @@ def Copy_(N, root=None, init=0, typ=None):
     if typ:
         for attr in ['fin','span','mang','sub','exe']: setattr(C,attr, getattr(N,attr))
         for attr in ['nt','baseT','box','rim','compared']: setattr(C,attr, copy(getattr(N,attr)))
-        for attr in ['Nt','Lt','Bt']: 
+        for attr in ['Nt','Lt','Bt']:
             Ft = getattr(N,attr)
             setattr(C,attr, CopyF(Ft) if isinstance(Ft, CF) else Copy_(Ft,init=3))
         if init:  # new G
