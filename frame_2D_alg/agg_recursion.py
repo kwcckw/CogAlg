@@ -157,7 +157,7 @@ def cross_comp(Ft, rc, nF='Nt'):  # core function mediating recursive rng+ and d
             E_ = get_exemplars({N for L in L_ for N in L.nt if N.em}, rc)  # N|C?
             G_,rc = cluster_N(Ft, E_,rc)  # form Bt, trans_cluster, sub+ in sum2G
             if G_:
-                Ft = sum2F(G_,nF, Ft)
+                Ft = sum2F(G_,nF, Ft)  # this is adding G.Nt.Nt? Or it should replace G.Nt?
                 if val_(Ft.dTT, rc+nw, TTw(Ft), (len(N_)-1)*Lw,1, TTd,cr) > 0:
                     G_,rc = cross_comp(Ft,rc,nF)  # agg+,trans-comp
     return G_,rc  # G_ is recursion flag?
@@ -224,9 +224,9 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None):
         box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
         angl = [A, np.sign(TT[1] @ wTTf[1])]
         Link.yx=yx; Link.box=box; Link.span=span; Link.angl=angl; Link.baseT= (_N.baseT+N.baseT)/2
-    if m > ave * nw:
+    if m > ave * nw and N.Nt.N_:  # skip PP
         dH,tt,C,Rc = comp_H(_N.Nt, N.Nt, Link)  # tentative H comp
-        if m + vt_(tt,Rc[0]/C) > ave * nw:
+        if m + vt_(tt,Rc/C)[0] > ave * nw:
             Link.H = dH  # other vals are tentative?
             for _Ft, Ft, tnF in zip((_N.Nt,_N.Ct,_N.Bt), (N.Nt,N.Ct,N.Bt), ('tNt','tCt','tBt')):
                 if _Ft and Ft:
@@ -247,8 +247,9 @@ def comp_Ft(_Ft, Ft, tnF, rc, root):  # root is nG, unpack node trees down to nu
             if tL.m > ave * (connw+rc): TTm += tL.dTT; C+=tL.c; Rc+=tL.rc; L_+=[tL]
             elif tL.d > avd*(connw+rc): TTd += tL.dTT; Cd+=tL.c
     if L_:
-        Rc /= L_
-        if val_(TTm,Rc,mw=(len(L_)-1)*Lw) > 0:
+        Rc /= len(L_)
+        if val_(TTm,Rc,np.sum([L.dTT for L in L_],axis=0), mw=(len(L_)-1)*Lw) > 0:
+            # this should be updated once from the deepest call? Else a same root maybe called in the recursion
             root_update(root, CF(N_=L_,nF=tnF, root=root,dTT=deepcopy(TTm),c=C,rc=Rc))  # all lower trans-comp vals
 
 def base_comp(_N,N):  # comp Et, baseT, extT, dTT
@@ -371,11 +372,11 @@ def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL
         tF_ = [[],[],[]]  # draft:
         for L in G.L_:    # splice trans_links from base links
             for tL_, Ft in zip(tF_, (getattr(L,'tNt',[]),getattr(L,'tBt',[]),getattr(L,'tCt',[]))):
-                tL_ += Ft.N_  # flat
+                if Ft: tL_ += Ft.N_  # flat
         # merge tL nt Gs|Cs, not Bs?
         for tL_, nF in zip(tF_, ('tNt','tBt','tCt')):
             for tL in tL_:  # merge trans_link.nt.roots
-                rt0 = tL.nt[0].root; rt1 = tL.nt[1].root  # CNs?
+                rt0 = tL.nt[0].root.root; rt1 = tL.nt[1].root.root  # CNs
                 if rt0 != rt1: add_N(rt0, rt1, merge=1)  # concat in higher G
 
         # this is simply extending currect Gs, no new attrs are needed?
@@ -556,7 +557,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
             G.span = np.hypot(dy_,dx_).mean()  # N centers dist to G center
         else: L_+=root.L_; ltt+=root.Lt.dTT; lc+=root.Lt.c
         m, d = vt_(ltt,lr)
-        G.Lt = CF(N_=L_,nF='Lt',root=G.Nt,TT=ltt,m=m,d=d,c=lc,rc=lr)
+        G.Lt = CF(N_=L_,nF='Lt',root=G.Nt,TT=ltt,m=m,d=d,c=lc,rc=lr)  # Lt here is per G, but Lt in cross_comp is per Ft?
         A = np.sum([l.angl[0] for l in L_], axis=0) if L_ else np.zeros(2)
         G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # angle dir = d sign
     if N_[0].typ==2 and G.L_:  # else mang = 1
@@ -572,10 +573,11 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
                 G.Lt.m, G.Lt.d = vt_(G.Lt.dTT, rc)
             G.L_ = L_
     if len(Ft_) > 2:  # from cluster_N
-        B_,_,btt,bc,br = Ft_[2]; m,d = vt_(btt,br)
-        Bt = CN(root=G,TT=btt,m=m,d=d,c=bc,rc=br); Bt.nF='Bt'; Bt.Nt.N_ = [B_]
+        B_,_,btt,bc,br = Ft_[2]; m,d = vt_(btt,br) 
+        Bt = CN(root=G,TT=btt,m=m,d=d,c=bc,rc=br); Bt.nF='Bt'; Bt.Nt.N_ = B_  # Bt.N_ should be flat?
         if typ!=1 and d > avd*br*nw:  # no ddfork
             cross_comp(Bt,bc,'Bt')
+        G.Bt = Bt  # not sure, so Bt here should be per Ft?
     if fsub:
         if G.Lt.m * G.Lt.d * ((len(N_)-1)*Lw) > ave*avd * (rc+1) * cw:  # Variance * borrowed Match?
             V = G.m - ave * (rc+1)  # cent|conn divisive clustering:
@@ -609,7 +611,9 @@ def sum2f(n_, nF,root):
     tt, c, rc = np.zeros((2,9)),0,0
     for n in n_: tt+=n.dTT; rc+=n.rc; c+=n.c
     rc /= len(n_); m,d = vt_(tt,rc)
-    return CF(N_=n_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc,root=root)
+    Ft = CF(N_=n_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc,root=root)
+    for n in n_:  n.root = Ft
+    return Ft
 
 def sum2F(N_, nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # -> CF/CN
     def sum_H(N_, Ft):
@@ -626,7 +630,8 @@ def sum2F(N_, nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # -> CF/
         TT = np.zeros((2,9)); C = 0; Rc = 0
         for n in N_: TT += n.dTT; C += n.c; Rc += n.rc
     rc = (Rc/len(N_)) if N_ else 1; m,d = vt_(TT,rc)
-    Ft = (CN,CF)[fCF](nF=nF, dTT=TT,m=m,d=d,c=C,rc=rc,root=root); Ft.N_=N_  # root Bt|Ct ->CN
+    Ft = (CN,CF)[fCF](nF=nF, dTT=TT,m=m,d=d,c=C,rc=rc,root=root)  # root Bt|Ct ->CN
+    for N in N_: Ft.N_ += [N]; N.root = Ft  # looks like we missed the root update here
     sum_H(N_,Ft)  # Ft.H = sum lower levels
     if fset:
         root_update(root, Ft, ini=2 if nF[0]=='t' else 1)
