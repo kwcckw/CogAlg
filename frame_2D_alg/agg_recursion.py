@@ -102,6 +102,7 @@ class CF(CBase):  # Nt,Ct, Bt,Lt: ext|int- defined nodes, ext|int- defining link
         f.dTT= kwargs.get('dTT',np.zeros((2,9)))
         f.m, f.d, f.c, f.rc = [kwargs.get(x,0) for x in ('m','d','c','rc')]
         f.root = kwargs.get('root',None)
+        f.fb_T = kwargs.get('fb_T_',[set(),set(),set()])  # use set can prevent packing the same Ft twice?
     def __bool__(f): return bool(f.c)
 
 ave = .3; avd = ave*.5  # ave m,d / unit dist, top of filter specification hierarchy
@@ -203,7 +204,7 @@ def comp_N_(iN_, rc, _iN_=[]):  # incremental-distance cross_comp, max dist depe
                 break  # beyond induction range
     return list(set(N_)), L_,TTm,cm,TTd,cd  # + dpTT for code-fitting backprop?
 
-def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None):
+def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None,tnF=None):
 
     def comp_H(_Nt,Nt, Link):
         dH, tt,C,Rc = [],np.zeros((2,9)),0,0
@@ -230,11 +231,11 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None):
             for _Ft, Ft, tnF in zip((_N.Nt,_N.Ct,_N.Bt), (N.Nt,N.Ct,N.Bt), ('tNt','tCt','tBt')):
                 if _Ft and Ft:
                     rc+=1; comp_Ft(_Ft,Ft, tnF,rc,Link)  # sub-comps
-    else:
-        # not updated:
-        root_update(N.root, Link)  # terminal comp with all lower trans-comp vals
+    elif not full:
+        N.root.fb_T[('tNt','tCt','tBt').index(tnF)].add(Link)  # Link is a special case? Usually we pack Ft, but Link.Nt is empty
+        root_update(N.root)  # terminal comp with all lower trans-comp vals
     for n, _n in (_N,N),(N,_N):
-            n.rim+=[Link]; n.eTT+=TT; n.ec+=Link.c; n.compared.add(_n)  # or all comps are unique?
+        n.rim+=[Link]; n.eTT+=TT; n.ec+=Link.c; n.compared.add(_n)  # or all comps are unique?
     return Link
 
 def comp_Ft(_Ft, Ft, tnF, rc, root):  # root is nG, unpack node trees down to numericals and compare them
@@ -245,11 +246,13 @@ def comp_Ft(_Ft, Ft, tnF, rc, root):  # root is nG, unpack node trees down to nu
         if _N is N:
             dtt = np.array([N.dTT[1], np.zeros(9)]); TTm += dtt; C += 1  # overlap: pure match
         else:   # form trans-links:
-            tL = comp_N(_N,N, rc,full=0)
+            tL = comp_N(_N,N, rc,full=0,tnF=tnF)
             if tL.m > ave * (connw+rc): TTm += tL.dTT; C+=tL.c; Rc+=tL.rc; L_+=[tL]
             elif tL.d > avd*(connw+rc): TTd += tL.dTT; Cd+=tL.c
-    tF = getattr(root,tnF)
-    cr = C/tF.c; tF.c+=C; tF.dTT+= TTm*cr; tF.rc+=Rc/C * cr
+    if C:  # may empty if m an d eval above are false for all
+        if not hasattr(root, tnF): setattr(root, tnF, CF(nF=tnF))  # init trans fork
+        tF = getattr(root,tnF)
+        cr = C/tF.c; tF.c+=C; tF.dTT+= TTm*cr; tF.rc+=Rc/C * cr
 
 def base_comp(_N,N):  # comp Et, baseT, extT, dTT
 
@@ -689,7 +692,7 @@ def mdecay(L_):  # slope function
 
 def root_update(root):
 
-    for ft_, nF,i in zip(root.fb_T, ('Nt','Ct'),(0,1)):
+    for ft_, nF,i in zip(root.fb_T, ('Nt','Ct','Bt'),(0,1,2)):  # why Bt is skipped? We need to form tBt as well?
         Ft = CF(nF=nF, root=root)
         C = sum([ft.c if ft else 0 for ft in ft_])
         for ft in ft_:
@@ -697,10 +700,10 @@ def root_update(root):
         if Ft:
             Ft.m,Ft.d = vt_(Ft.dTT,Ft.rc); Ft.c = C
             setattr(root,'t'+nF, Ft)
-            if root.root: root.root.fb_T[i] += [Ft]
-        elif root.root: root.root.fb_T[i] += [[]]
-    root.fb_T = [[],[]]
-    if root.root and len(root.root.fb_T[0]) == len(root.root.N_):
+            if root.root: root.root.fb_T[i].add(Ft)
+        elif root.root: root.root.fb_T[i].add(None)  # add dummy value to preserve number of N_?
+    root.fb_T = [set(),set(),set()]
+    if root.root and len(root.root.fb_T[0]) == len(root.root.N_):  # this will neverb e true for root_update of link in comp_Ft?
         root_update(root.root)
 
 def CopyF(F, root=None, cr=1):  # F = CF
@@ -883,6 +886,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                     G_,TT,C = trace_edge(N_,G_,TT,C, 3,tile)  # flatten, cluster B_-mediated Gs, init Nt
     if G_:
         setattr(tile,'Nt', sum2F(G_,'Nt',tile,TT,C,Rc=1))  # update tile.wTT?
+        tile.dTT = TT; tile.c = C; tile.rc = sum([G.rc for G in G_])  # we need to sum tile's param manually now?
         if vt_(tile.dTT)[0] > ave:
             return tile
 
