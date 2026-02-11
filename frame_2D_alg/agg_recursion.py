@@ -88,7 +88,7 @@ class CN(CBase):
         n.rN_ = kwargs.get('rN_',[]) # reciprocal root nG_ for bG|cG, nG has Bt.N_,Ct.N_ instead?
         n.compared = set()
         n.nF = kwargs.get('nF', 'Nt')  # to set attr in root_update
-        n.fb_T = kwargs.get('fb_T_', [[],[],[]])
+        n.fb_T = kwargs.get('fb_T_', [[],[]])
         # ftree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
     def __bool__(n): return bool(n.c)
 
@@ -151,7 +151,7 @@ def cross_comp(Ft, rc, nF='Nt'):  # core function mediating recursive rng+ and d
     N_, G_ = Ft.N_, []  # N_|B_|C_, rc=rdn+olp
     iN_,L_,TT,c,TTd,cd = comp_N_(N_,rc) if N_[0].typ else comp_C_(N_,rc, fC=1)  # nodes | links | centroids
     if L_:
-        if L_: root_update(Ft.root)
+        root_update(Ft.root)  # if L_ is always true anyway
         for n in iN_: n.em, n.ed = vt_(np.sum([l.dTT for l in n.rim],axis=0), rc)
         cr = cd / (c+cd) * .5  # dfork borrow ratio, .5 for one direction
         if val_(TT, rc+connw,TTw(Ft),(len(L_)-1)*Lw,1,TTd,cr) > 0:
@@ -193,7 +193,7 @@ def comp_N_(iN_, rc, _iN_=[]):  # incremental-distance cross_comp, max dist depe
             m, d = vt_(pTT,lrc)  # +|-match certainty
             if m > 0:
                 if abs(m) < ave * nw:  # different ave for projected surprise value, comp in marginal predictability
-                    Link = comp_N(_N,N, lrc, A=dy_dx, span=dist)
+                    Link = comp_N(_N,N, lrc, A=dy_dx, span=dist, rL=_N.root.root)  # we need to assign link.root here? Else that root_update in cross_comp will never update anything
                     dTT, m,d,c = Link.dTT,Link.m,Link.d,Link.c
                     if   m > ave: TTm+=dTT; cm+=c; L_+=[Link]; N_+=[_N,N]  # combined CN dTT and L_
                     elif d > avd: TTd+=dTT; cd+=c  # no overlap to simplify
@@ -219,7 +219,7 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=[]):
 
     TT = base_comp(_N,N)[0] if full else comp_derT(_N.dTT[1],N.dTT[1])
     m,d = vt_(TT,rc)
-    Link = CN(typ=1,exe=1, nt=[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c),rc=rc)
+    Link = CN(typ=1,exe=1, nt=[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c),rc=rc,root = rL)  # this root assignment could be default?
     Link.tNt,Link.tCt,Link.tBt = CF(nF='tNt',root=Link),CF(nF='tCt',root=Link),CF(nF='tBt',root=Link)  # typ 1 only
     if full:
         if span is None: span = np.hypot(*_N.yx - N.yx)
@@ -227,11 +227,12 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=[]):
         box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
         angl = [A, np.sign(TT[1] @ wTTf[1])]
         Link.yx=yx; Link.box=box; Link.span=span; Link.angl=angl; Link.baseT= (_N.baseT+N.baseT)/2
-    else: Link.root = rL
     if N.typ and m > ave*nw:
         dH,tt,C,Rc = comp_H(_N.Nt, N.Nt, Link)  # tentative comp
         if m + vt_(tt,Rc/C)[0] > ave * nw:
             Link.H = dH  # hm,hd are temporary placeholders
+            # lenN is the total combination of N.N_ and _N.N_, without counting the same node pair
+            Link.lenN = len(set(_N.N_)) * len(set(N.N_)) - len(set(_N.N_) & set(N.N_))   # for length checking with fb_T, else Link.Nt.N_ is always empty
             for _Ft, Ft, tnF in zip((_N.Nt,_N.Ct,_N.Bt), (N.Nt,N.Ct,N.Bt), ('tNt','tCt','tBt')):
                 if _Ft and Ft:
                     rc+=1; comp_Ft(_Ft,Ft, tnF,rc, Link)  # sub-comps
@@ -239,7 +240,7 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=[]):
         # terminal sub-comp, rL is root_Link, Link is tL + sub-tL layers
         rL.fb_T[0] += [add_F(Link.tNt,Link.tBt, fB=1) if Link.tNt else []]
         rL.fb_T[1] += [Link.tCt if Link.tCt else []]
-        if len(rL.fb_T[0]) == len(rL.N_):
+        if len(rL.fb_T[0]) == rL.lenN:
             root_update(rL)
     for n, _n in (_N,N),(N,_N):
         n.rim+=[Link]; n.eTT+=TT; n.ec+=Link.c; n.compared.add(_n)  # or all comps are unique?
@@ -713,7 +714,7 @@ def root_update(root):
             if root.root: root.root.fb_T[i] += [Ft]
         elif root.root: root.root.fb_T[i] += [[]]
     root.fb_T = [[],[]]
-    if root.root and len(root.root.fb_T[0]) == len(root.root.N_):
+    if root.root and len(root.root.fb_T[0]) == (root.root.lenN if root.root.typ == 1 else len(root.root.N_)):  # link uses lenN
         root_update(root.root)
 
 def CopyF(F, root=None, cr=1):  # F = CF
