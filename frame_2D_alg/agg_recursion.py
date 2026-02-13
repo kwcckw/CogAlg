@@ -57,7 +57,7 @@ def prop_F_(F):  # factory function to get and update top-composition fork.N_
 
 class CN(CBase):
     name = "node"
-    N_,C_,B_ = prop_F_('Nt'),prop_F_('Ct'),prop_F_('Bt')  # ext| int- defined nodes, ext|int- defining links, Lt/Ft, Ct/lev, Bt/G
+    N_,C_,B_ = prop_F_('Nt'),prop_F_('Ct'),prop_F_('Bt')  # ext|int- defined nodes,links, Lt/Ft, Ct/lev, Bt/G
     @property
     def L_(N): return N.Nt.Lt.N_
     @L_.setter
@@ -99,10 +99,10 @@ class CF(CBase):  # Nt,Ct, Bt,Lt: ext|int- defined nodes, ext|int- defining link
     name = "fork"
     def __init__(f, **kwargs):
         super().__init__()
-        f.nF = kwargs.get('nF','Nt')  # default Nt?
+        f.nF = kwargs.get('nF','Nt')
         f.N_ = kwargs.get('N_',[])  # flat
         f.H  = kwargs.get('H', [])  # CF levs
-        if f.nF == 'Nt': f.Lt = kwargs.get('Lt',CF(nF='Lt'))  # from Ft cross_comp, Ct is parallel to Nt
+        f.Lt = kwargs.get('Lt',[])  # from Ft cross_comp, Ct is parallel to Nt
         f.dTT= kwargs.get('dTT',np.zeros((2,9)))
         f.m, f.d, f.c, f.rc = [kwargs.get(x,0) for x in ('m','d','c','rc')]
         f.root = kwargs.get('root',None)
@@ -189,7 +189,6 @@ def comp_N_(iN_, rc, _iN_=[]):  # incremental-distance cross_comp, max dist depe
         return iTT+eTT
 
     N_,L_,TTm,cm,TTd,cd = [],[],np.zeros((2,9)),0,np.zeros((2,9)),0; dpTT=np.zeros((2,9))  # no c?
-    Lroot = iN_[0].root.root.Lt  # why we need this Lroot here? Lt will be summed later so it's redundant here?
     for N in iN_:
         pVt_ = []
         for dist, dy_dx, _N in N.pL_:  # rim angl is not canonic
@@ -232,23 +231,14 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=[]):
                 if L.m > ave * (connw+rc):
                     L_+= [L]; TT+=L.dTT*L.c; Rc+=L.rc*L.c; C+=L.c
         if C:
-            tF = getattr(Link, tnF); _c = tF.c; C+=_c; tF.c = C
-            tF.N_ += L_  # we need to pack L_?
+            tF = getattr(Link, tnF); tF.N_+= L_; _c=tF.c; C+=_c; tF.c=C
             tF.dTT = dTT = (tF.dTT*_c +TT) / C
-            tF.rc = rc = (tF.rc *_c +Rc) / C
-            tF.m, tF.d = vt_(dTT,rc)
+            tF.rc = rc = (tF.rc *_c +Rc) / C;  tF.m,tF.d = vt_(dTT,rc)
 
     TT = base_comp(_N,N)[0] if full else comp_derT(_N.dTT[1],N.dTT[1])
     m,d = vt_(TT,rc)
     Link = CN(typ=1,exe=1, nt=[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c),rc=rc)
     Link.tNt,Link.tCt,Link.tBt = CF(nF='tNt',root=Link),CF(nF='tCt',root=Link),CF(nF='tBt',root=Link)  # typ 1 only
-    if full:
-        if span is None: span = np.hypot(*_N.yx - N.yx)
-        yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx
-        box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
-        angl = [A, np.sign(TT[1] @ wTTf[1])]
-        Link.yx=yx; Link.box=box; Link.span=span; Link.angl=angl; Link.baseT=(_N.baseT+N.baseT)/2
-    else: Link.root = rL
     if N.typ and m > ave*nw:
         dH,tt,C,Rc = comp_H(_N.Nt, N.Nt, Link)  # tentative comp
         if m + vt_(tt,Rc/C)[0] > ave * nw:
@@ -256,11 +246,17 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=[]):
             for _Ft, Ft, tnF in zip((_N.Nt,_N.Ct,_N.Bt), (N.Nt,N.Ct,N.Bt), ('tNt','tCt','tBt')):
                 if _Ft and Ft:
                     rc+=1; comp_Ft(_Ft,Ft, tnF,rc, Link)  # sub-comps
-    if not full:  # this section should be default now
-        # terminal sub-comp, rL:root_L, Link is tL + sub-tL layers, batched feedback
+    if full:
+        if span is None: span = np.hypot(*_N.yx - N.yx)
+        yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx
+        box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
+        angl = [A, np.sign(TT[1] @ wTTf[1])]
+        Link.yx=yx; Link.box=box; Link.span=span; Link.angl=angl; Link.baseT=(_N.baseT+N.baseT)/2
+    else:
+        Link.root = rL  # terminal sub-comp, rL:root_L, Link: tL+ sub-tL layers, batched feedback
         rL.fb_T[0] += [add_F(Link.tNt,Link.tBt, fB=1) if Link.tNt else []]
         rL.fb_T[1] += [Link.tCt if Link.tCt else []]
-        root_update(rL)  # this update should be default now, so that top link are getting feedback from all lower levels
+        root_update(rL)
     for n, _n in (_N,N),(N,_N):
         n.rim+=[Link]; n.eTT+=TT; n.ec+=Link.c; n.compared.add(_n)  # or all comps are unique?
     return Link
@@ -623,13 +619,7 @@ def sum2f(n_, nF,root):
     for n in n_: tt+=n.dTT; rc+=n.rc; c+=n.c
     rc /= len(n_); m,d = vt_(tt,rc)
     Ft = CF(N_=n_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc,root=root)
-    for n in n_:  
-        n.root = Ft
-        if nF == 'Lt':  # add top L feedback in sum2f?
-            L = n  # renamed L for clarity
-            if hasattr(L,'tNt'): root.fb_T[0] += [L.tNt]  # feedback from top link to root
-            if hasattr(L,'tCt'): root.fb_T[1] += [L.tCt]
-            
+    for n in n_:  n.root = Ft
     return Ft
 
 def sum2F(N_, nF, root, TT=np.zeros((2,9)), C=0, Rc=0, fset=1, fCF=1):  # -> CF/CN
@@ -716,15 +706,17 @@ def root_update(rL):
     for ft_, nF,i in zip(rL.fb_T, ('Nt','Ct'),(0,1)):
         C = sum([ft.c if ft else 0 for ft in ft_])
         if C:
-            Ft = CF(nF=nF, c=C, root=rL)  # nF here should be tnF?
+            Ft = CF(nF=nF, c=C, root=rL)
             for ft in ft_:
-                if ft: cr = ft.c/C; Ft.dTT += ft.dTT*cr; Ft.rc += ft.rc*cr; Ft.N_ += ft.N_  # we need to pack N_?
+                if ft:
+                    cr = ft.c/C; Ft.dTT += ft.dTT*cr; Ft.rc += ft.rc*cr
+                    if isinstance(rL,CN): Ft.N_+=ft.N_  # trans-links, else replaced in clustering
             Ft.m,Ft.d = vt_(Ft.dTT,Ft.rc)
             setattr(rL,'t'+nF, Ft)
             if rL.root: rL.root.fb_T[i] += [Ft]
         elif rL.root: rL.root.fb_T[i] += [[]]
     if rL.root:
-        rL.root.fb_T = [[],[]]
+        rL.root.fb_T = [[], []]
         if len(rL.root.fb_T[0]) == len(rL.root.N_):
             root_update(rL.root)
 
