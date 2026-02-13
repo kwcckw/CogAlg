@@ -59,9 +59,13 @@ class CN(CBase):
     name = "node"
     N_,C_,B_ = prop_F_('Nt'),prop_F_('Ct'),prop_F_('Bt')  # ext|int- defined nodes,links, Lt/Ft, Ct/lev, Bt/G
     @property
-    def L_(N): return N.Nt.Lt.N_
+    def L_(N): 
+        if isinstance(N.Nt.Lt, list): N.Nt.Lt =CF(root=N.Nt)
+        return N.Nt.Lt.N_
     @L_.setter
-    def L_(N,v): N.Nt.Lt.N_ = v
+    def L_(N,v): 
+        if isinstance(N.Nt.Lt, list): N.Nt.Lt =CF(root=N.Nt)
+        N.Nt.Lt.N_ = v
     def __init__(n, **kwargs):
         super().__init__()
         n.typ = kwargs.get('typ', 0)
@@ -158,7 +162,10 @@ def cross_comp(Ft, rc, nF='Nt'):  # core function mediating recursive rng+ and d
         cr = cd / (c+cd) * .5  # dfork borrow ratio, .5 for one direction
         if val_(TT, rc+connw,TTw(Ft),(len(L_)-1)*Lw,1,TTd,cr) > 0:
             Ft.Lt = sum2f(L_,'Lt', Ft)  # G.L_=Nt.Lt.N_
-            root_update(Ft)  # batched L_fb_-> Ft
+            for L in L_:  # feedback from top link after deeper sub-comps
+                if hasattr(L, 'tNt'): Ft.fb_T[0] += [L.tNt]
+                if hasattr(L, 'tCt'): Ft.fb_T[1] += [L.tCt]
+            root_update(Ft)  # batched L_fb_-> Ft  (This is actually adding Ft.tNt, Ft.tCt)
             E_ = get_exemplars({N for L in L_ for N in L.nt if N.em}, rc)  # N|C?
             G_,rc = cluster_N(Ft, E_,rc)  # form Bt, trans_cluster, sub+ in sum2G
             if G_:
@@ -467,7 +474,7 @@ def cluster_C(Ft, E_, rc):  # form centroids by clustering exemplar surround via
                 DTT += dTT
                 if M > Ave * len(N_) * O and val_(dTT, rc+O, TTw(C),(len(N_)-1)*Lw):
                     C = cent_TT(sum2C(N_,_C,_Ci=None), rc=r)
-                    for n,m,o in zip(N_,m_,o_): n.m_+=[m]; n.o_+=[o]; n.rN_+= [C]; C.rN_+= [n] # reciprocal root assign
+                    for n,m,o in zip(N_,m_,o_): n.m_+=[m]; n.o_+=[o]; n.rN_+= [C]; C.C_+= [n] # reciprocal root assign
                     C._N_ = list(set(N__))  # frontier
                     C_ += [C]; Dm+=dm; Do+=do  # new incl or excl
                 else:
@@ -492,9 +499,8 @@ def cluster_C(Ft, E_, rc):  # form centroids by clustering exemplar surround via
             n.exe = (n.d if n.typ==1 else n.m) + np.sum([m-ave*o for m, o in zip(n.m_, n.o_)]) - ave
         if val_(DTT, rc+olp, TTw(Ft), (len(C_)-1)*Lw) > 0:
             root = Ft.root
-            Ct = sum2F(C_,'Ct',root, fset=0, fCF=0)
+            Ct = sum2F(C_,'Ct',root, fCF=0)  # fset should be 1 here, Ct won't be replaced anyway
             cross_comp(Ct,rc)  # all distant Cs, seq C_ in eigenvector = argmax(root.wTT)?
-            setattr(root,'Ct', Ct)
             # root_update(root,Ct)  # no update, redundant? Nt|Ct priority eval?
     return C_, rc
 
@@ -654,7 +660,10 @@ def add_F(F,f, cr=1, merge=1, fB=0):
                 else:   H.append(CopyF(lev, root))
         return list(reversed(H))
     cc = F.c / f.c  # *= cr?
-    if fB: pass  # Bt.m += borrow from Nt and root, Nt.m -= lend only?
+    if fB: 
+        # f is tFt, so f.root is link, we need to retrieve f.root.root, which is link.root, so we need to assign Ft as link.root first?
+        root = f.root.root
+        # Bt.m += borrow from Nt and root, Nt.m -= lend only?
     else:
         F.dTT += f.dTT * cc
     m,d = vt_(F.dTT,F.rc); F.m=m; F.d=d
@@ -710,7 +719,7 @@ def root_update(rL):
             for ft in ft_:
                 if ft:
                     cr = ft.c/C; Ft.dTT += ft.dTT*cr; Ft.rc += ft.rc*cr
-                    if isinstance(rL,CN): Ft.N_+=ft.N_  # trans-links, else replaced in clustering
+                    if isinstance(rL,CN): Ft.N_+=ft.N_; Ft.nF = 't'+nF  # trans-links, else replaced in clustering (we need to add nF as tnF when rL is link?)
             Ft.m,Ft.d = vt_(Ft.dTT,Ft.rc)
             setattr(rL,'t'+nF, Ft)
             if rL.root: rL.root.fb_T[i] += [Ft]
