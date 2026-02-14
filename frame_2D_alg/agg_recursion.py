@@ -206,7 +206,7 @@ def comp_N_(iN_, rc, _iN_=[]):  # incremental-distance cross_comp, max dist depe
                     elif d > avd: TTd+=dTT; cd+=c  # no overlap to simplify
                     dpTT += pTT-dTT  # prediction error to fit code, not implemented
                 else:
-                    pL = CN(typ=-1, nt=[_N,N], dTT=pTT,m=m,d=d,c=min(N.c,_N.c), rc=lrc, angl=np.array([dy_dx,1],dtype=object),span=dist)
+                    pL = CN(typ=-1, nt=[_N,N], dTT=pTT,m=m,d=d,c=min(N.c,_N.c), rc=lrc, angl=np.array([dy_dx,1],  dtype=object),yx=np.add(_N.yx,N.yx)/2,span=dist)  # i think we need span in pL, else their link's span is empty in the B fork
                     L_+= [pL]; N.rim+=[pL]; N_+=pL.nt; _N.rim+=[pL]; TTm+=pTT; cm+=pL.c  # same as links in clustering, L.N_=nt?
                 pVt_ += [[dist,dy_dx,_N,m]]  # for next rim eval
             else:
@@ -584,7 +584,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
         L_,_,ltt,lc,lr = Ft_[1]
         if init:  # else same ext
             yx_ = np.array([n.yx for n in N_]); G.yx = yx = yx_.mean(axis=0); dy_,dx_ = (yx_-yx).T
-            G.span = np.hypot(dy_,dx_).mean()  # N centers dist to G center
+            G.span = max(eps, np.hypot(dy_,dx_).mean())  # N centers dist to G center (prevent zero for singleton)
         else: L_+=root.L_; ltt+=root.Lt.dTT; lc+=root.Lt.c
         m, d = vt_(ltt,lr)
         Nt.Lt = CF(N_=L_,nF='Lt',root=G.Nt,TT=ltt,m=m,d=d,c=lc,rc=lr)  # Nt only?
@@ -609,7 +609,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
         if typ!=1 and d > avd*br*nw:  # no ddfork
             cross_comp(Bt,bc,'Bt')
         G.Bt = Bt
-        G.m += Bt.brrw; G.c += Bt.c * Bt.brrw  # not sure, no G d,dTT?
+        G.m += Bt.brrw; G.c += Bt.c * Bt.brrw  # not sure, no G d,dTT? (but we not really use d now except for L?)
     if fsub:
         if G.Lt.m * G.Lt.d * ((len(N_)-1)*Lw) > ave*avd * (rc+1) * cw:  # Variance * borrowed Match?
             V = G.m - ave * (rc+1)  # cent|conn divisive clustering:
@@ -942,8 +942,8 @@ def trace_edge(N_,_G_,_TT,_C, rc,root):  # cluster contiguous shapes via PPs in 
     for n_,ntt,nc,l_,ltt,lc,merged in Gt_:
         if not merged:
             if vt_(ntt+ltt,rc)[0] > ave*rc:  # wrap singletons too
+                TT += ntt+ltt; C += nc+lc  # this should be before sum2G to accum the params first    
                 G_ += [sum2G(((n_,'Nt',ntt,nc,rc),(l_,'Lt',ltt,lc,rc)), TT,C,rc,root,typ=2,fsub=0)]  # add Bt?
-                TT += ntt+ltt; C += nc+lc
             else:
                 for N in n_: N.fin=0; N.root=root
     if val_(TT,rc+1,TTw(root)) > 0: _G_+=G_;_TT+=TT;_C+=C  # eval per edge, concat in tile?
