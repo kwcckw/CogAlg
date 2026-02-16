@@ -222,16 +222,17 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
             lrc = (_lev.rc+lev.rc)/2; m,d = vt_(ltt,lrc)
             dH += [CF(dTT=ltt,m=m,d=d,c=lc,rc=lrc,root=Link)]
             tt += ltt; C+=lc; Rc+=lrc
-        return dH,tt,C, rc+ Rc/len(dH) * C/rL.c  # same norm for tt?
+        return dH,tt,C, rc+ Rc/len(dH) * (C/rL.c if rL else _N.root.c)  # same norm for tt? (if rL is None, use _N.root's (Nt) c? )
 
     def link_update(rL, rnF):
         FtT = []
-        for ft_,nF in zip((rL.tNt.fb_, rL.tBt.fb_, rL.tCt.fb_), ('tNt','tBt','tCt')):
+        # the section below is having problem because each fb_ packing FtTs, which FtT is a nested list instead of ft
+        for ft_,nF in zip((rL.tNt.fb_, rL.tBt.fb_, rL.tCt.fb_), ('tNt','tBt','tCt')): 
             if ft_:
                 C = sum([ft.c if ft else 0 for ft in ft_])  # or no empty fts?
                 tL_,tt,c,rc = [],np.zeros((2,9)),0,0
                 for ft in ft_:
-                    if ft: tL_+= ft.N_; cr = ft.c/C; tt += ft.dTT*cr; rc += ft.rc*cr
+                    if ft: tL_+= ft.N_; cr = ft.c/C; tt += ft.dTT*cr; rc += ft.rc*cr  # this is actually merging across forks
                 m, d = vt_(tt,rc)
                 FtT += [CF(N_=tL_,nF=nF,dTT=tt,m=m,d=d,c=c,rc=rc)]
             else: FtT += [[]]
@@ -239,9 +240,14 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
 
     def up_update(FtT, rL, rnF):  # upward recursion
         if any(FtT) and rL.root:  # empty in top Link
-            getattr(rL.root, rnF).fb_ += [FtT]
+            getattr(rL.root, rnF).fb_ += [FtT] 
+            # we shouldn't check with F.fb_ and F.N_ since F.fb_ is not aligned with tFt.N_
             if all([len(F.fb_)==len(F.N_) for F in (rL.root.tNt, rL.root.tBt, rL.root.tCt)]):  # feedback is complete
-                # Lf = comp(L.Nt,L.Bt), Lff = comp_N(Lf,L.Ct)
+                # something like this?
+                if rL.Nt and rL.Bt:
+                    Lf = comp_Ft(rL.Nt,rL.Bt, tnF=rnF,rc=1,Link=rL); 
+                    if rL.Ct:
+                        Lff = comp_Ft(Lf,rL.Ct,tnF=rnF,rc=2,Link=rL)
                 # comb Lff into rnF?
                 link_update(rL.root, rnF)  # target fork
 
@@ -261,7 +267,7 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
 
     TT = base_comp(_N,N)[0] if full else comp_derT(_N.dTT[1],N.dTT[1])
     m,d = vt_(TT,rc)
-    Link = CN(typ=1,exe=1, nt=[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c),rc=rc)
+    Link = CN(typ=1,exe=1, nt=[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c),rc=rc,root=rL)  # we need to assign root = rL to check rL.root in up_update?
     Link.tNt, Link.tCt, Link.tBt = CF(nF='tNt',root=Link),CF(nF='tCt',root=Link),CF(nF='tBt',root=Link)  # typ 1 only
     if N.typ and m > ave*nw:
         dH,tt,C,Rc = comp_H(_N.Nt, N.Nt, Link)  # tentative comp
@@ -527,7 +533,7 @@ def cluster_P(_C_,N_,rc):  # Parallel centroid refining, _C_ from cluster_C, N_=
             N.m_,N.d_,N.r_ = map(list,zip(*[vt_(base_comp(C,N)[0]) + (C.rc,) for C in _C_]))  # distance-weight match?
             N.o_= np.argsort(np.argsort(N.m_)[::-1]) + 1  # rank of each C_[i] = rdn of C in C_
             dM += sum(abs(_m-m) for _m,m in zip(N._m_,N.m_))
-            dO += sum(abs(_o-o) for _o,o in zip(N._o_,N.m_))
+            dO += sum(abs(_o-o) for _o,o in zip(N._o_,N.o_))  # should be o_ here
             M += sum(N.m_)
             O += sum(N.m_)
         C_ = [sum2C(N_,_C, i) for i, _C in enumerate(_C_)]  # update with new coefs, _C.m, N->C refs
@@ -553,9 +559,8 @@ def sum2C(N_,_C, _Ci=None):  # fuzzy sum params used in base_comp
     for N in N_:
         Ci = N.rN_.index(_C) if _Ci is None else _Ci
         ccoef_ += [N._m_[Ci] / (ave* N._o_[Ci]) * _C.m]  # *_C.m: proj survival, vs post-prune eval?
-        c_ = [c * max(cc, 0) for c,cc in zip_longest(c_,ccoef_, fillvalue=1)]
-        # we need to use zip_longest and fillvalue with 1, else c_ will be pruned to single element when ccoef stats with a single element
         if _Ci is not None: N._m_,N._d_,N._r_ = N.m_,N.d_,N.r_  # from cluster_P
+    c_ = [c * max(cc, 0) for c,cc in zip_longest(c_,ccoef_, fillvalue=1)]  # this should be here? why we need to recompute all cs in the loop?
     tot = sum(c_)+eps; Par_ = []
     for par_ in rc_, dTT_, baseT_, span_, yx_:
         Par_.append(sum([p * c for p,c in zip(par_,c_)]))
@@ -750,7 +755,7 @@ def Copy_(N, root=None, init=0, typ=None):
 
 def extend_box(_box, box):
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
-    return min(y0,_y0), min(x0,_x0), max(yn,_yn), max(xn,_xn)
+    return np.array((min(y0,_y0), min(x0,_x0), max(yn,_yn), max(xn,_xn)))  # remain type as np array
 
 def sort_H(H, fi):  # lev.rc = complementary to root.rc and priority index in H, if selective and aligned
 
