@@ -171,14 +171,19 @@ def cross_comp(Ft, rc, nF='Nt'):  # core function mediating recursive rng+ and d
                     G_,rc = cross_comp(Ft,rc,nF)  # agg+,trans-comp
     return G_,rc  # G_ is recursion flag?
 
-def comp_N_(iN_, rc, _iN_=[]):  # incremental-distance cross_comp, max dist depends on prior match
 
+def comp_N_(iN_, rc, tnF=None, rL=None):  # incremental-distance cross_comp, max dist depends on prior match
+
+    ff = tnF != None  # flag for comp_ft
+    N_,L_,TTm,cm,TTd,cd, Rc = [],[],np.zeros((2,9)),0,np.zeros((2,9)),0,0; dpTT=np.zeros((2,9))  # no c?
     for i, N in enumerate(iN_):  # get all-to-all pre-links
         N.pL_ = []
-        for _N in _iN_ if _iN_ else iN_[i+1:]:  # optional _iN_ as spec
-            if _N.sub != N.sub: continue  # or comp x composition?
-            dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
-            N.pL_ += [[dist, dy_dx, _N]]
+        for _N in iN_[i+1:]:  # optional _iN_ as spec (we no longer need that _iN_?)
+            # if _N.sub != N.sub: continue  # or comp x composition?  This is no longer useful?
+            if N is _N: dtt= np.array([N.dTT[1],np.zeros(9)]); TTm+=dtt; cm+=1  # overlap = unit match, no miss
+            else:
+                dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
+                N.pL_ += [[dist, dy_dx, _N]]
         N.pL_.sort(key=lambda x: x[0])  # proximity prior, test compared?
 
     def proj_V(_N,N, dist, pVt_):  # _N x N induction
@@ -192,17 +197,16 @@ def comp_N_(iN_, rc, _iN_=[]):  # incremental-distance cross_comp, max dist depe
                 eTT += proj_N(_N,_dist,-_dy_dx, rc)  # reverse direction
         return iTT+eTT
 
-    N_,L_,TTm,cm,TTd,cd = [],[],np.zeros((2,9)),0,np.zeros((2,9)),0; dpTT=np.zeros((2,9))  # no c?
     for N in iN_:
         pVt_ = []
         for dist, dy_dx, _N in N.pL_:  # rim angl is not canonic
             pTT = proj_V(_N,N, dist, pVt_); lrc = rc + (N.rc+_N.rc) / 2  # pVt_: [[dist, dy_dx, _N, V]]
             m, d = vt_(pTT,lrc)  # +|-match certainty
-            if m > 0:
-                if abs(m) < ave * nw:  # different ave for projected surprise value, comp in marginal predictability
-                    Link = comp_N(_N,N, lrc, A=dy_dx, span=dist)  # L.root assigned in sum2f?
-                    dTT, m,d,c = Link.dTT,Link.m,Link.d,Link.c
-                    if   m > ave: TTm+=dTT; cm+=c; L_+=[Link]; N_+=[_N,N]  # combined CN dTT and L_
+            if m > 0 or ff:
+                if abs(m) < ave * nw or ff:  # different ave for projected surprise value, comp in marginal predictability
+                    Link = comp_N(_N,N, lrc, full= not ff, A=dy_dx, span=dist, rL=rL, rnF=tnF)  # L.root assigned in sum2f?
+                    dTT,m,d,c,rc = Link.dTT,Link.m,Link.d,Link.c,Link.rc
+                    if   m > ave: TTm+=dTT; cm+=c; Rc+=rc; L_+=[Link]; N_+=[_N,N]  # combined CN dTT and L_ (for comp_ft, we sitll need *c here?)
                     elif d > avd: TTd+=dTT; cd+=c  # no overlap to simplify
                     dpTT += pTT-dTT  # prediction error to fit code, not implemented
                 else:
@@ -211,6 +215,15 @@ def comp_N_(iN_, rc, _iN_=[]):  # incremental-distance cross_comp, max dist depe
                 pVt_ += [[dist,dy_dx,_N,m]]  # for next rim eval
             else:
                 break  # beyond induction range
+                
+    if ff and cm:
+        C = cm
+        cr = C / rL.c
+        rc += Rc*cr; m,d = vt_(TTm, rc)
+        tFt = CF(N_=L_,nF=tnF,dTT=TTm,m=m,d=d,c=C,rc=rc,root=rL)
+        getattr(rL,tnF).fb_ += [tFt]
+        return tFt
+              
     return list(set(N_)), L_,TTm,cm,TTd,cd  # + dpTT for code-fitting backprop?
 
 def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
@@ -237,6 +250,7 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
                 setattr(L, nF, CF(N_=tL_, nF=nF, dTT=tt, m=m, d=d, c=C, rc=rc, root=L))
             getattr(L, nF).fb_ = []
 
+    '''
     def comp_Ft(_Ft, Ft, tnF, rc, Link):  # root is nG, unpack node trees down to numericals and compare them
     # replace with comp_N_(_Ft, Ft, rc), add option for overlap and tnF
 
@@ -253,6 +267,7 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
             tFt = CF(N_=L_,nF=tnF,dTT=TT,m=m,d=d,c=C,rc=rc,root=Link)
             getattr(Link,tnF).fb_ += [tFt]
             return tFt
+    '''
 
     TT = base_comp(_N,N)[0] if full else comp_derT(_N.dTT[1],N.dTT[1])
     m,d = vt_(TT,rc)
@@ -267,8 +282,9 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
                     getattr(L,'tNt').fb_ += [comp_N(n,_n,rc)]  # sub-comp for links
             for _Ft, Ft, tnF in zip((_N.Nt,_N.Ct,_N.Bt), (N.Nt,N.Ct,N.Bt), ('tNt','tCt','tBt')):  # all empty in link
                 if _Ft and Ft:  # add eval?
-                    rc+=1; FtT += [comp_Ft(_Ft,Ft, tnF,rc, L)]  # fork sub-comp
+                    rc+=1; FtT += [comp_N_(_Ft.N_+Ft.N_,rc,tnF, L)]  # fork sub-comp
             link_update(L)
+            L.tBt.typ = L.tNt.typ = L.tCt = 0  # To eval and skip comp_H
             if L.tBt: L.tNt = comp_N(L.tNt, L.tBt, rc, full=0, rL=L, rnF='tNt')  # L.tBt.typ = L.tNt.typ = 0
             if L.tCt: L.tNt = comp_N(L.tNt, L.tCt, rc, full=0, rL=L, rnF='tNt')  # L.tCt.typ = L.tNt.typ = 0
     if full:
@@ -277,8 +293,10 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
         box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
         angl = [A, np.sign(TT[1] @ wTTf[1])]
         L.yx=yx; L.box=box; L.span=span; L.angl=angl; L.baseT=(_N.baseT+N.baseT)/2
-    for n, _n in (_N,N),(N,_N):
-        n.rim+=[L]; n.eTT+=TT; n.ec+=L.c; n.compared.add(_n)  # or all comps are unique?
+    
+    if isinstance(N, CN):  # skip the comparison between tFts
+        for n, _n in (_N,N),(N,_N):
+            n.rim+=[L]; n.eTT+=TT; n.ec+=L.c; n.compared.add(_n)  # or all comps are unique?
     return L
 
 def base_comp(_N,N):  # comp Et, baseT, extT, dTT
@@ -431,7 +449,7 @@ def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL
             while __L_:
                 _L_ = []
                 for L in __L_:  # flood-fill via frontier links
-                    _N = L.nt[0] if L.nt[1].fin else L.nt[1]; in_.add(L)
+                    _N = L.nt[0] if L.nt[1].fin else L.nt[1]; in_.add(L)  # what if both nt fin== 0? We need to add both Ns?
                     if not _N.fin and _N in _N_:
                         m,d = nt_vt(*L.nt)
                         if m > ave * (rc-1):  # cluster nt, L,C_ by combined rim density:
@@ -606,7 +624,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     G.m, G.d = vt_(G.dTT,rc)
     if len(Ft_) > 2:  # from cluster_N
         B_,_,btt,bc,br = Ft_[2]; m, d = vt_(btt,br)
-        Bt = CN(N_=B_,dTT=btt,m=m,d=d,c=bc,rc=br,root=G); Bt.nF='Bt' # use as root:  (should be dTT)
+        Bt = CN(dTT=btt,m=m,d=d,c=bc,rc=br,root=G); Bt.N_=B_; Bt.nF='Bt' # use as root:  (should be dTT)
         if typ!=1 and d > avd*br*nw:  # no ddfork
             cross_comp(Bt, bc,'Bt')
         Bt.brrw = Bt.m * (root.root.m * (decay * (root.root.span/G.span)))  # trans-Bt contrast is local; subtract from root.m?
