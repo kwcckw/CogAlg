@@ -171,10 +171,8 @@ def cross_comp(Ft, rc, nF='Nt'):  # core function mediating recursive rng+ and d
                     G_,rc = cross_comp(Ft,rc,nF)  # agg+,trans-comp
     return G_,rc  # G_ is recursion flag?
 
-
 def comp_N_(iN_, rc, tnF=None, rL=None):  # incremental-distance cross_comp, max dist depends on prior match
 
-    ff = tnF != None  # flag for comp_ft
     N_,L_,TTm,cm,TTd,cd, Rc = [],[],np.zeros((2,9)),0,np.zeros((2,9)),0,0; dpTT=np.zeros((2,9))  # no c?
     for i, N in enumerate(iN_):  # get all-to-all pre-links
         N.pL_ = []
@@ -202,11 +200,11 @@ def comp_N_(iN_, rc, tnF=None, rL=None):  # incremental-distance cross_comp, max
         for dist, dy_dx, _N in N.pL_:  # rim angl is not canonic
             pTT = proj_V(_N,N, dist, pVt_); lrc = rc + (N.rc+_N.rc) / 2  # pVt_: [[dist, dy_dx, _N, V]]
             m, d = vt_(pTT,lrc)  # +|-match certainty
-            if m > 0 or ff:
-                if abs(m) < ave * nw or ff:  # different ave for projected surprise value, comp in marginal predictability
-                    Link = comp_N(_N,N, lrc, full= not ff, A=dy_dx, span=dist, rL=rL, rnF=tnF)  # L.root assigned in sum2f?
+            if m > 0:
+                if abs(m) < ave * nw:  # different ave for projected surprise value, comp in marginal predictability
+                    Link = comp_N(_N,N, lrc, full=not tnF, A=dy_dx, span=dist, rL=rL, rnF=tnF)
                     dTT,m,d,c,rc = Link.dTT,Link.m,Link.d,Link.c,Link.rc
-                    if   m > ave: TTm+=dTT; cm+=c; Rc+=rc; L_+=[Link]; N_+=[_N,N]  # combined CN dTT and L_ (for comp_ft, we sitll need *c here?)
+                    if   m > ave: TTm+=dTT; cm+=c; Rc+=rc; L_+=[Link]; N_+=[_N,N]  # combined CN dTT and L_ add *c|cr
                     elif d > avd: TTd+=dTT; cd+=c  # no overlap to simplify
                     dpTT += pTT-dTT  # prediction error to fit code, not implemented
                 else:
@@ -215,15 +213,12 @@ def comp_N_(iN_, rc, tnF=None, rL=None):  # incremental-distance cross_comp, max
                 pVt_ += [[dist,dy_dx,_N,m]]  # for next rim eval
             else:
                 break  # beyond induction range
-                
-    if ff and cm:
-        C = cm
-        cr = C / rL.c
-        rc += Rc*cr; m,d = vt_(TTm, rc)
-        tFt = CF(N_=L_,nF=tnF,dTT=TTm,m=m,d=d,c=C,rc=rc,root=rL)
+    if tnF and cm:
+        cr = cm / rL.c; rc += Rc*cr; m,d = vt_(TTm, rc)
+        tFt = CF(N_=L_,nF=tnF,dTT=TTm,m=m,d=d,c=cm,rc=rc,root=rL)
         getattr(rL,tnF).fb_ += [tFt]
         return tFt
-              
+
     return list(set(N_)), L_,TTm,cm,TTd,cd  # + dpTT for code-fitting backprop?
 
 def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
@@ -250,25 +245,6 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
                 setattr(L, nF, CF(N_=tL_, nF=nF, dTT=tt, m=m, d=d, c=C, rc=rc, root=L))
             getattr(L, nF).fb_ = []
 
-    '''
-    def comp_Ft(_Ft, Ft, tnF, rc, Link):  # root is nG, unpack node trees down to numericals and compare them
-    # replace with comp_N_(_Ft, Ft, rc), add option for overlap and tnF
-
-        L_=[]; TT=np.zeros((2,9)); C= Rc= 0
-        for _N, N in product(_Ft.N_,Ft.N_):  # top lev, direct or via prop_F if nest->CN, spec eval in comp_n:
-            if _N is N:
-                dtt= np.array([N.dTT[1],np.zeros(9)]); TT+=dtt; C+=1  # overlap = unit match, no miss
-            else:
-                L = comp_N(_N,N, rc,full=0, rL=Link, rnF=tnF)  # fork trans-links
-                if L.m > ave * (connw+rc): L_+=[L]; TT+=L.dTT*L.c; Rc+=L.rc*L.c; C+=L.c  # add to rL
-        if C:
-            cr = C / Link.c
-            rc += Rc*cr; m,d = vt_(TT, rc)
-            tFt = CF(N_=L_,nF=tnF,dTT=TT,m=m,d=d,c=C,rc=rc,root=Link)
-            getattr(Link,tnF).fb_ += [tFt]
-            return tFt
-    '''
-
     TT = base_comp(_N,N)[0] if full else comp_derT(_N.dTT[1],N.dTT[1])
     m,d = vt_(TT,rc)
     L = CN(typ=1, nt=[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c),rc=rc,root=rL, exe=1)
@@ -284,7 +260,7 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
                 if _Ft and Ft:  # add eval?
                     rc+=1; FtT += [comp_N_(_Ft.N_+Ft.N_,rc,tnF, L)]  # fork sub-comp
             link_update(L)
-            L.tBt.typ = L.tNt.typ = L.tCt = 0  # To eval and skip comp_H
+            L.tBt.typ = L.tNt.typ = L.tCt.typ = 0  # skip comp_H, Fts
             if L.tBt: L.tNt = comp_N(L.tNt, L.tBt, rc, full=0, rL=L, rnF='tNt')  # L.tBt.typ = L.tNt.typ = 0
             if L.tCt: L.tNt = comp_N(L.tNt, L.tCt, rc, full=0, rL=L, rnF='tNt')  # L.tCt.typ = L.tNt.typ = 0
     if full:
@@ -293,8 +269,8 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None, rnF=None):
         box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
         angl = [A, np.sign(TT[1] @ wTTf[1])]
         L.yx=yx; L.box=box; L.span=span; L.angl=angl; L.baseT=(_N.baseT+N.baseT)/2
-    
-    if isinstance(N, CN):  # skip the comparison between tFts
+
+    if isinstance(N, CN):  # no links between tFts
         for n, _n in (_N,N),(N,_N):
             n.rim+=[L]; n.eTT+=TT; n.ec+=L.c; n.compared.add(_n)  # or all comps are unique?
     return L
@@ -624,7 +600,7 @@ def sum2G(Ft_,tt,c,rc, root=None, init=1, typ=None, fsub=1):  # updates root if 
     G.m, G.d = vt_(G.dTT,rc)
     if len(Ft_) > 2:  # from cluster_N
         B_,_,btt,bc,br = Ft_[2]; m, d = vt_(btt,br)
-        Bt = CN(dTT=btt,m=m,d=d,c=bc,rc=br,root=G); Bt.N_=B_; Bt.nF='Bt' # use as root:  (should be dTT)
+        Bt = CN(dTT=btt,m=m,d=d,c=bc,rc=br,root=G); Bt.N_=B_; Bt.nF='Bt' # use as root:
         if typ!=1 and d > avd*br*nw:  # no ddfork
             cross_comp(Bt, bc,'Bt')
         Bt.brrw = Bt.m * (root.root.m * (decay * (root.root.span/G.span)))  # trans-Bt contrast is local; subtract from root.m?
@@ -833,7 +809,7 @@ def proj_focus(PV__, y,x, Fg):  # radial accum of projected focus value in PV__
         PV__[row,col] += pV__  # in-place accum pV to rim
         n += 1
 
-def proj_TT(L, cos_d, dist, rc, pTT, wTT, fdec=0, frec=0):  # accumulate link pTT with iTT or eTT internally
+def proj_TT(L, cos_d, dist, rc, pTT, wTT, fdec=0, frec=0):  # accumulate link pTT with iTT or eTT internally, L may be N?
 
     dec = dist if fdec else ave ** (1 + dist / L.span)  # ave: match decay rate / unit distance
     TT = np.array([L.dTT[0] * dec, L.dTT[1] * cos_d * dec])
