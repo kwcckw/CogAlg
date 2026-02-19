@@ -96,6 +96,7 @@ class CN(CBase):
         n.compared = set()
         n.nF = kwargs.get('nF', 'Nt')  # to set attr in root_update
         n.fb_ = kwargs.get('fb_', [])
+        if n.typ == 1 or n.typ == -1: n.tNt, n.tCt, n.tBt = CF(nF='tNt',root=n),CF(nF='tCt',root=n),CF(nF='tBt',root=n)  # default init for links here?
         # ftree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
     def __bool__(n): return bool(n.c)
 
@@ -213,13 +214,14 @@ def comp_N_(iN_,pairs, rc, tnF=None, rL=None):  # incremental-distance cross_com
                 pVt_ += [[dist,dy_dx,_N,m]]  # for next rim eval
             else:
                 break  # beyond induction range
-    if tnF and cm:
-        cr = cm / rL.c; Rc /= cm; rc += Rc*cr; m,d = vt_(TTm, rc)
-        tFt = CF(N_=L_,nF=tnF,dTT=TTm,m=m,d=d,c=cm,rc=rc,root=rL)
-        getattr(rL,tnF).fb_ += [tFt]
-        return tFt
-
-    return list(set(N_)), L_,TTm,cm,TTd,cd  # + dpTT for code-fitting backprop?
+    if tnF:  # when tnF is True, shouldn't return tuple
+        if cm:
+            cr = cm / rL.c; Rc /= cm; rc += Rc*cr; m,d = vt_(TTm, rc)
+            tFt = CF(N_=L_,nF=tnF,dTT=TTm,m=m,d=d,c=cm,rc=rc,root=rL)
+            getattr(rL,tnF).fb_ += [tFt]
+            return tFt
+    else:
+        return list(set(N_)), L_,TTm,cm,TTd,cd  # + dpTT for code-fitting backprop?
 
 def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None):
 
@@ -246,9 +248,9 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None):
     TT = base_comp(_N,N)[0] if full else comp_derT(_N.dTT[1],N.dTT[1])
     m,d = vt_(TT,rc)
     ff = isinstance(_N,CF); fff = ff and isinstance(_N.N_[0],CF)  # comp_Ft -> L.N_= [Nt,Bt] | [Nt,Bt,Ct]
+    # _N is never a CF because we only init L as CF below, so we must init it else where firSt?
     if ff: L = CF(typ=1, N_=[*_N.N_,N] if fff else[_N,N], dTT=TT,m=m,d=d,c=min(N.c,_N.c),rc=rc,root=rL)
     else:  L = CN(typ=1, nt=[_N,N], dTT=TT, m=m, d=d, c=min(N.c,_N.c), rc=rc, root=rL, exe=1)
-    L.tNt, L.tCt, L.tBt = CF(nF='tNt',root=L),CF(nF='tCt',root=L),CF(nF='tBt',root=L)
     if N.typ and m > ave*nw:
         dH,tt,C,Rc = comp_H(_N.Nt, N.Nt, L)  # tentative comp
         rc=Rc; FtT = []
@@ -259,7 +261,9 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None):
             for _Ft, Ft, tnF in zip((_N.Nt,_N.Ct,_N.Bt), (N.Nt,N.Ct,N.Bt), ('tNt','tCt','tBt')):  # all empty in link
                 if _Ft and Ft:  # add eval?
                     rc += 1  # fork sub-comp:
-                    FtT += [comp_N_(_Ft.N_+Ft.N_, product(_Ft.N_,Ft.N_), rc,tnF,L)]
+                    # FtT += [comp_N_(_Ft.N_+Ft.N_, product(_Ft.N_,Ft.N_), rc,tnF,L)]  
+                    tFt = comp_N_(_Ft.N_+Ft.N_, product(_Ft.N_,Ft.N_), rc,tnF,L)
+                    if tFt: getattr(L,tnF).fb_ += [tFt]  # instead of packing FtT, why not packing into L.tFt?
             link_update(L)
             # python batches updates bottom-up
             L.tBt.typ = L.tNt.typ = L.tCt.typ = 0  # skip comp_H, Fts
@@ -396,12 +400,13 @@ def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL
         # merge tL nt Gs|Cs, not Bs?
         # draft:
         for L in G.L_:
-            for tL, nF in zip((L.tNt.N_,L.tBt.N_L.tCt.N_), ('tNt','tBt','tCt')):
-                for tFt in tL.N_:  # merge trans_link.nt.roots
-                    for tl in tFt.N_:  # combined Ft
-                        rt0 = tl.root.root; rt1 = tl[1].root.root  # CNs
-                        if rt0 != rt1: add_N(rt0, rt1, merge=1)
-                        # concat in higher G
+            for tL_, nF in zip((L.tNt.N_,L.tBt.N_,L.tCt.N_), ('tNt','tBt','tCt')):
+                for tL in tL_:
+                    for tFt in tL.N_:  # merge trans_link.nt.roots
+                        for tl in tFt.N_:  # combined Ft
+                            rt0 = tl.root.root; rt1 = tl[1].root.root  # CNs
+                            if rt0 != rt1: add_N(rt0, rt1, merge=1)
+                            # concat in higher G
         ''' reset rc:
             tL_ = [tL for n in root.N_ for l in n.L_ for tL in l.N_]  # trans-links
             if sum(tL.m for tL in tL_) * ((len(tL_)-1)*Lw) > ave*(rc+connw):  # use tL.dTT?
