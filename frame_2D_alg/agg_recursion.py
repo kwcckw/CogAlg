@@ -250,7 +250,7 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None):
         dH,htt,C,Rc = comp_H(_N.Nt, N.Nt, L)  # tentative comp
         rc = Rc
         if m + vt_(htt,Rc/C)[0] > ave * nw:
-            if N.typ==1:
+            if N.typ==1 or N.typ==-1:  # for pL, do we need to skip it?
                 for n,_n in product(_N.nt, N.nt):
                     L.Lt.fb_ += [comp_N(n,_n,rc)]  # sub-comp for links, L.Nt is trans-forks
             else:   # tFt in Ls
@@ -259,15 +259,26 @@ def comp_N(_N,N, rc, full=1, A=np.zeros(2),span=None, rL=None):
                         rc += 1  # fork sub-comp:
                         comp_N_(_Ft.N_+Ft.N_, product(_Ft.N_,Ft.N_), rc,tnF,L)
             link_update(L)  # python batches bottom-up
-            Nt, Bt, Ct = L.Nt,L.Bt,L.Ct  # trans-links formed above
-            dFt = CF(N_= [Nt,Bt,Ct]); l_ = []
-            for _F,F in (Nt,Bt),(Nt,Ct):  # comp Nt/Ct, Nt/Bt vals
-                if _F and F:
-                    tt = comp_derT(_F.dTT[1], F.dTT[1]); c = min(_F.c,F.c); rc = (_F.rc+F.rc)/2; m,d = vt_(tt,rc)
-                    dF = CF(dTT=tt,m=m,d=d,c=c,rc=rc,root=dFt.Lt)
-                    l_+= [dF]
-            if l_: dFt.Lt = sum2f(l_,'Lt', dFt)
-            L.Nt = dFt  # tFt, no regular L.Nt yet
+            if N.typ==1 or N.typ==-1: 
+                # if we need to compare trans fork from Lt, something like this?
+                if _N.Lt and N.Lt:
+                    l_ = []
+                    for _dF,dF in product(_N.Lt.N_, N.Lt.N_):
+                        tt = comp_derT(_dF.dTT[1], dF.dTT[1]); c = min(_dF.c,dF.c); rc = (_dF.rc+dF.rc)/2; m,d = vt_(tt,rc)
+                        ddF = CF(dTT=tt,m=m,d=d,c=c,rc=rc,root=L.Lt)
+                        l_+= [ddF]
+                    if l_: L.Lt = sum2f(l_,'Lt', L.Lt)             
+            else:
+                Nt, Bt, Ct = L.Nt,L.Bt,L.Ct  # trans-links formed above
+                dFt = CF(N_= [Nt,Bt,Ct]); l_ = []
+                for _F,F in (Nt,Bt),(Nt,Ct):  # comp Nt/Ct, Nt/Bt vals
+                    if _F and F:
+                        tt = comp_derT(_F.dTT[1], F.dTT[1]); c = min(_F.c,F.c); rc = (_F.rc+F.rc)/2; m,d = vt_(tt,rc)
+                        dF = CF(dTT=tt,m=m,d=d,c=c,rc=rc,root=dFt.Lt)
+                        l_+= [dF]
+                if l_: L.Lt = sum2f(l_,'Lt', L.Lt)  # not sure but it's better to have Lt per L since L.Nt will be reset in trans_cluster later?
+                L.Nt = dFt  # tFt, no regular L.Nt yet
+                L.Bt = CF(root=L); L.Ct = CF(root=L)  # after packing L.Bt and Ct into dFt, we actually can reset them here? 
     if full:
         if span is None: span = np.hypot(*_N.yx - N.yx)
         yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx
@@ -399,7 +410,7 @@ def cluster_N(Ft, _N_, rc):  # flood-fill node | link clusters, flat, replace iL
         for L in G.L_:
             for tFt in L.Nt.N_:  # tNt, tBt, tCt
                 for tL in tFt.N_:  # merge trans_link.nt.roots
-                    rt0 = tL.root.root; rt1 = tL[1].root.root  # CNs
+                    rt0 = tL.nt[0].root.root; rt1 = tL.nt[1].root.root  # CNs (tL is rL, so we should use tL.nt)
                     if rt0 != rt1: add_N(rt0, rt1, merge=1)  # concat in higher G
             L.Nt = CF()   # reset
             ''' reset rc:
