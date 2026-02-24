@@ -233,10 +233,10 @@ def comp_N(_N,N, r, full=1, A=np.zeros(2),span=None, rL=None):
             else:
                 for _Ft,Ft, tnF in zip((_N.Nt,_N.Bt,_N.Ct,_N.Lt),(N.Nt,N.Bt,N.Ct,N.Lt),('Nt','Bt','Ct','Lt')):  # N.Lt is tFt
                     if _Ft and Ft:  # fork sub-comp, add eval?
-                        dFt = comp_F(_Ft,Ft); r+=1  # draft, add to default fb, add dFt.N_ below?
-                        if tnF is not 'Lt': comp_N_(_Ft.N_+Ft.N_, product(_Ft.N_,Ft.N_), r,tnF,L)
+                        dFt = comp_F(_Ft,Ft,r,L); r+=1  # draft, add to default fb, add dFt.N_ below?
+                        getattr(L, tnF).fb_ += [dFt]  # not sure, looks like it's better to be placed here?
             for ft_, nF in zip((L.Nt.fb_,L.Bt.fb_,L.Ct.fb_,L.Lt.fb_),('Nt','Bt','Ct','Lt')):
-                if ft_: sum2f(ft_,nF,r)  # python-batched bottom-up
+                if ft_: sum2f(ft_,nF,getattr(L, nF))  # python-batched bottom-up  (replace L.Ft here? Or it should accumulates into L.Ft?)
             L.Nt = comb_Ft(L.Nt,L.Lt,L.Bt,L.Ct, L)  # trans-links formed above, default Nt?
     if full:
         if span is None: span = np.hypot(*_N.yx - N.yx)
@@ -248,9 +248,17 @@ def comp_N(_N,N, r, full=1, A=np.zeros(2),span=None, rL=None):
         n.rim.N_+=[L]; n.compared.add(_n)  # or unique comps?
     return L
 
-def comp_F(_F,F):
+def comp_F(_F, F, r=0, rL=None):
+
+    nF = F.nF
     ddTT = comp_derT(_F.dTT[1], F.dTT[1]*(F.c/_F.c)); m,d = vt_(ddTT,(_F.r+F.r)/2)
-    return CF(dTT=ddTT, m=m,d=d,c=min(_F.c,F.c),r=(_F.r+F.r)/2)  # empty N_
+    dFt = CF(dTT=ddTT, m=m,d=d,c=min(_F.c,F.c),r=(_F.r+F.r)/2)  # initial dFt
+    if nF != 'Lt' and _F.N_ and F.N_:  # conditional comp_N_
+        N_ = _F.N_+F.N_
+        if (rL.m + dFt.m) * ((len(N_)-1)*Lw) > ave * nw:   
+            _,L_,TTm,cm,_,_,R = comp_N_(N_, product(_F.N_,F.N_), r, nF, rL)
+            dFt.N_ = L_; dFt.dTT += TTm; dFt.c += cm; dFt.r += R  # skip TTd and cd? 
+    return dFt
 
 def base_comp(_N,N):  # comp Et, baseT, extT, dTT
 
@@ -344,7 +352,7 @@ def comp_C_(C_, r,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s,
     for L in L_:
         if L.m > ave* (connw+r): mL_+= [L]; N_+= L.nt
     if mL_: _,_,tt,c,_ = sum_vt(mL_); TTm+= tt*c; cm+=c  # sum r?
-    return list(set(N_)), mL_,TTm,cm,TTd,cd
+    return list(set(N_)), mL_,TTm,cm,TTd,cd,r  # return r for consistency between comp_N_
 
 def get_exemplars(N_,r):  # multi-layer non-maximum suppression -> sparse seeds for diffusive clustering, cluster_N too?
     E_ = set()
@@ -530,9 +538,10 @@ def comb_Ft(Nt, Lt, Bt, Ct, root, N=0):  # default Nt, flag N
     if N: T = CN(dTT=deepcopy(Nt.dTT), c=Nt.c,r=Nt.r, root=root); T.Nt=CopyF(Nt,root=T)  # forks in sum2G, no comp?
     else: T = CF(N_=[Nt,Lt,Bt,Ct], nF='tFt',dTT=deepcopy(Nt.dTT), c=Nt.c,r=Nt.r,root=root)  # trans-links in comp_N
     dF_ = []
-    if Lt: Lt.r += Lt.m>T.m; add_F(T,Lt); dF_ += [comp_F(T,Lt)]; Nt.Lt = Lt  # Lt in sum2G, tLt in comp_N?
-    if Bt: Bt.r += Bt.m>T.m; add_F(T,Bt); dF_ += [comp_F(T,Bt)]
-    if Ct: Ct.r += Ct.m>T.m; add_F(T,Ct); dF_ += [comp_F(T,Ct)]
+    # for Fts below, we shouldn't merge them or pack Lt as T.N_? Else T.N_ is packing N_+L_+B_+C_
+    if Lt: Lt.r += Lt.m>T.m; add_F(T,Lt,merge=-1); dF_ += [comp_F(T,Lt)]; Nt.Lt = Lt  # Lt in sum2G, tLt in comp_N?
+    if Bt: Bt.r += Bt.m>T.m; add_F(T,Bt,merge=-1); dF_ += [comp_F(T,Bt)]
+    if Ct: Ct.r += Ct.m>T.m; add_F(T,Ct,merge=-1); dF_ += [comp_F(T,Ct)]
     if dF_: T.Lt = sum2f(dF_,'Lt',T)  # cross-fork covariance
     return T
 
@@ -640,11 +649,11 @@ def add_F(Ft,ft, r=1, merge=1):
                 else:   H.append(CopyF(lev, root))
         return list(H)
     Ft.c+=ft.c; cr = Ft.c/ft.c; Ft.dTT+=ft.dTT*cr; Ft.r+=ft.r*cr; Ft.m,Ft.d = vt_(Ft.dTT,Ft.r)
-    if merge:
+    if merge==1:
         for n in ft.N_: Ft.N_ += [n]; n.root = Ft
         if isinstance(Ft, CN): Ft = Ft.Nt  # G from comb_Ft
         if Ft.H and ft.H: Ft.H = sum_H(Ft.H, ft.H, r, Ft)
-    else: Ft.N_.append(ft)
+    elif merge==0: Ft.N_.append(ft)
     return Ft
 
 def merge_f(N,n, cc=1):
@@ -685,7 +694,7 @@ def mdecay(L_):  # slope function
 
 def CopyF(F, root=None, r=1):  # F = CF
     C = CF(dTT=F.dTT*r, m=F.m, d=F.d, c=F.c, r=F.r, root=root or F.root)
-    C.N_ = [(Copy_(N,root=C) if isinstance(N, CN) else CopyF(N,root=C)) for N in F.N_]  # flat
+    C.N_ = [(Copy_(N,root=C) if isinstance(N, CN) else (CopyF(N,root=C) if isinstance(N, CF) else [])) for N in F.N_]  # flat
     return C
 
 def Copy_(N, root=None, init=0, typ=None):
@@ -903,7 +912,7 @@ def trace_edge(N_,_G_,_TT,_C, r,root):  # cluster contiguous shapes via PPs in e
         if not merged:
             if vt_(ntt+ltt,r)[0] > ave*r:  # wrap singletons, use Gt.r?
                 TT += ntt+ltt; C += nc+lc  # add Bt?
-                G_ += [sum2G([(n_,'Nt',ntt,nc,r)] + ([(l_,'Lt',ltt,lc,r)] if l_ else []), ntt+ltt,nc+lc,r,root,typ=2,fsub=0)]
+                G_ += [sum2G([(n_,'Nt',ntt,nc,r)] + ([(l_,'Lt',ltt,lc,r)] if l_ else []),root,typ=2,fsub=0)]
             else:
                 for N in n_: N.fin=0; N.root=root
     if val_(TT,r+1,TTw(root)) > 0: _G_+=G_;_TT+=TT;_C+=C  # eval per edge, concat in tile?
@@ -958,7 +967,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9))):  # a
         Fg_ = expand_lev(iY,iX, elev, Fg)
         if Fg_:  # higher-scope sparse tile
             _,_,fTT,fC,_ = sum_vt(Fg_)
-            frame = sum2G(Fg_, fTT, fC, r=1,root=frame,init=0)
+            frame = sum2G(Fg_,root=frame,init=0)
             if Fg and cross_comp(Fg.Nt, r=elev)[0]:  # or val_? spec->tN_,tC_,tL_
                 frame.N_ = frame.N_+[Fg]; elev+=1  # forward comped tile
                 if max_elev == 4:  # seed, not from expand_lev
