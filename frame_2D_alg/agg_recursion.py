@@ -153,7 +153,7 @@ def TTw(G): return getattr(G,'wTT',wTTf)
 def cross_comp(Ft, ir, nF='Nt'):  # core function mediating recursive rng+ and der+ cross-comp and clustering
 
     N_, G_ = Ft.N_, []  # rc=rdn+olp, comp N_|B_|C_:
-    iN_,L_,TT,c,TTd,cd, r = comp_N_(N_,combinations(N_,2),ir) if N_[0].typ else comp_C_(N_,ir,fC=1); r+=ir
+    iN_,L_,TT,c,r, TTd,cd = comp_N_(N_,combinations(N_,2),ir) if N_[0].typ else comp_C_(N_,ir,fC=1); r+=ir
     if L_:
         if val_(TT, r+connw,TTw(Ft),(len(L_)-1)*Lw,1,TTd,r) > 0:  # G.L_ = Nt.Lt.N_, flat, additional root +=:
             sum2f(L_,'Lt',Ft, fset=2)  # update Ft, root
@@ -197,8 +197,8 @@ def comp_N_(iN_, pairs, r, tnF=None, rL=None):  # incremental-distance cross_com
             if m > 0:
                 if abs(m) < ave * nw:  # different ave for projected surprise value, comp in marginal predictability
                     Link = comp_N(_N,N, lr, full=not tnF, A=dy_dx, span=dist, rL=rL)
-                    dTT, m,d,c,r = Link.dTT,Link.m,Link.d,Link.c,Link.r
-                    if   m > ave: TT+=dTT*c; C+=c; R+=r*c; L_+=[Link]; N_+=[_N,N]
+                    dTT, m,d,c,lr = Link.dTT,Link.m,Link.d,Link.c,Link.r  # prevent replacing of the input r
+                    if   m > ave: TT+=dTT*c; C+=c; R+=lr*c; L_+=[Link]; N_+=[_N,N]
                     elif d > avd: TTd+=dTT*c; cd+=c  # no overlap to simplify
                     dpTT += pTT-dTT  # prediction error to fit code, not implemented
                 else:
@@ -250,12 +250,13 @@ def comp_F(_F, F, r=0, rL=None):
     ddTT = comp_derT(_F.dTT[1], F.dTT[1]); m,d = vt_(ddTT,(_F.r+F.r)/2)
     dFt = CF(dTT=ddTT, m=m,d=d,c=min(_F.c,F.c),r=(_F.r+F.r)/2)
     _N_,N_=_F.N_,F.N_; nF=F.nF; ff= nF=='Lt'
+    if ff and _F.nF != 'Lt': N_ = [N for tFt in F.N_ for dFt in tFt.N_ for N in dFt.N_]  # looks like we may comp across trans fork here, when we comp T and Lt, where Lt.N_ are tFts
     if  _N_ and N_:
         if ff: Np_ = [[_n,n] for _n,n in zip(_N_,N_) if _n and n]  # same forks
         else:  Np_ = list(product(_N_,N_))  # pairs
         if (rL.m+m)/2 * ((len(Np_)-1)*Lw) > ave * nw:
             if ff:
-                L_ = [comp_F(*Np) for Np in Np_]; TT,C,R = np.zeros((2,9)),0,0
+                L_ = [comp_F(*Np, (_F.r+F.r)/2, _F) for Np in Np_]; TT,C,R = np.zeros((2,9)),0,0  # root = _F here?
                 for L in L_: TT+=L.dTT; C+=L.c; R+=L.r
             else: _,L_,TT,C,_,_,R = comp_N_(_N_+N_,Np_,r,nF,rL)  # TTd,cd?
             dFt.N_ = L_; dFt.dTT += TT; dFt.c += C; dFt.r += R
@@ -270,7 +271,7 @@ def base_comp(_N,N):  # comp Et, baseT, extT, dTT
     pars  = np.array([M,D,c, (I,wI),G, [Dy,Dx], L,(N.span,wS)], dtype=object)
     mA,dA = comp_A(_N.angl[0]*_N.angl[1], N.angl[0]*N.angl[1])
     m_,d_ = comp(_pars,pars, mA,dA)  # M,D,n, I,G,a, L,S,A
-    dm_,dd_ = comp_derT(N.dTT[1], N.dTT[1])
+    dm_,dd_ = comp_derT(_N.dTT[1], N.dTT[1])  # should be _N here
 
     return np.array([m_+dm_,d_+dd_]), rn  # or rm, rv?
 '''
@@ -357,7 +358,7 @@ def comp_C_(C_, r,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s,
         if L.m > ave* (connw+r): mL_+= [L]; N_+= L.nt
     if mL_:
         _,_,tt,c,r = sum_vt(mL_); rc=c/cm; TTm+=tt*rc; R+=r*rc; cm+=c
-    return list(set(N_)), mL_,TTm,cm,TTd,cd,R
+    return list(set(N_)), mL_,TTm,cm,R,TTd,cd
 
 def get_exemplars(N_,r):  # multi-layer non-maximum suppression -> sparse seeds for diffusive clustering, cluster_N too?
     E_ = set()
@@ -436,7 +437,7 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
         C._L_ = set(E.rim.N_)  # init peer links
         for n in C._N_:
             nm = C.m * (n.c/C.c); n.m_+=[nm]; n._m_+=[nm]; n.o_+=[1]; n._o_+=[1]; n.rN_+=[C]; n._C_+=[C]
-        for n in C._N_: n.m_+=[C.m]; n._m_+=[C.m]; n.o_+=[1]; n._o_+=[1]; n.rN_+=[C]; n._C_+=[C]
+        # for n in C._N_: n.m_+=[C.m]; n._m_+=[C.m]; n.o_+=[1]; n._o_+=[1]; n.rN_+=[C]; n._C_+=[C]  # this is redundant
         _C_ += [C]
     while True:  # reform C_, add direct in-C_ cross-links for membership?
         C_,cnt,olp, mat,dif, DTT,Dm,Do = [],0,0,0,0,np.zeros((2,9)),0,eps; Ave = ave * (r+nw)
@@ -486,8 +487,9 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
         for n in [N for C in C_ for N in C.N_]:  # exemplar V + sum n match_dev to Cs, m* ||C rvals:
             n.exe = (n.d if n.typ==1 else n.m) + np.sum([m-ave*o for m, o in zip(n.m_, n.o_)]) - ave
         if val_(DTT, r+olp, TTw(Ft), (len(C_)-1)*Lw) > 0:
-            root = Ft.root
+            root = Ft.root; Ct0 = root.Ct
             Ct = sum2F(C_,'Ct',root, fCF=0)
+            if Ct0: Ct.H += [Ct0]; Ct.dTT+=Ct0.dTT; Ct.r=Ct0.r; Ct.c=Ct0.c; Ct.m,Ct.d=vt_(Ct.dtt,Ct.r)
             _, r = cross_comp(Ct,r)  # all distant Cs, seq C_ in eigenvector = argmax(root.wTT)? Nt|Ct priority eval?
     return C_, r
 
@@ -520,7 +522,8 @@ def cluster_P(_C_,N_,r):  # Parallel centroid refining, _C_ from cluster_C, N_= 
     return _C_
 ''' next order: level-parallel cluster_H / multiple agg+? compress as autoencoder? '''
 
-def _sum2C(N_,_C, _Ci=None):  # fuzzy sum params used in base_comp
+# why there's a _ in sum2C
+def sum2C(N_,_C, _Ci=None):  # fuzzy sum params used in base_comp
 
     c_,r_,dTT_,baseT_,span_,yx_ = zip(*[(n.c, n.r, n.dTT, n.baseT, n.span, n.yx) for n in N_])
     ccoef_ = []
@@ -557,8 +560,8 @@ def sum2G(ft_, root=None, init=1, typ=None):
         if lm*ld* ((len(G.N_)-1)*Lw) > ave*avd* (lr+1)*cw:
             V = lm - ave*(lr+1) * connw
             if V > 0:  # sub+
-                    if (mdecay(N_)-decay) * V > ave*centw: cluster_C(G.Nt, N_,r+1)
-                    else: cluster_N(G.Nt, N_,r+1)
+                if (mdecay(N_)-decay) * V > ave*centw: cluster_C(G.Nt, N_,r+1)
+                else: cluster_N(G.Nt, N_,r+1)
     if G.Bt:
         Bt = G.Bt; bd,br = Bt.d,Bt.r
         if bd > avd*br*nw and typ!=1: cross_comp(Bt, br,'Bt')  # no ddfork
@@ -568,12 +571,15 @@ def sum2G(ft_, root=None, init=1, typ=None):
 
 def comb_Ft(Nt, Lt, Bt, Ct, root, fN=0):  # default Nt, flag N
 
-    if fN: T = CN(dTT=deepcopy(Nt.dTT), c=Nt.c,r=Nt.r, root=root); T.Nt=CopyF(Nt,root=T)  # forks in sum2G, no comp?
+    if fN: 
+        T = CN(dTT=deepcopy(Nt.dTT), c=Nt.c,r=Nt.r, root=root); T.Nt=CopyF(Nt,root=T)  # forks in sum2G, no comp?
+        for N in Nt.N_: add_F(T, N, 'Nt', merge=0)
+        # below shouldn't be relevant to trans forks
+        if len(T.N_) >1:  # not sure  
+            yx_ = np.array([N.yx for N in T.N_]); T.yx=yx= yx_.mean(axis=0); dy_,dx_= (yx_-yx).T
+            T.span = np.hypot(dy_,dx_).mean()
+        else: N = T.Nt.N_[0]; T.yx = copy(N.yx); T.span = N.span
     else:  T = CF(N_=[Nt,Lt,Bt,Ct], nF='tFt',dTT=deepcopy(Nt.dTT), c=Nt.c,r=Nt.r,root=root)  # trans-links in comp_N
-    if len(T.N_ >1):  # not sure
-        yx_ = np.array([N.yx for N in T.N_]); T.yx=yx= yx_.mean(axis=0); dy_,dx_= (yx_-yx).T
-        T.span = np.hypot(dy_,dx_).mean()
-    else: N = T.Nt.N_[0]; T.yx = copy(N.yx); T.span = N.span
     dF_ = []
     if Lt: r=sum_vt([T,Lt])[-1]; add_F(T,Lt,'Lt',r); dF_ += [comp_F(T,Lt,r,root)]; T.Nt.Lt = Lt  # Lt in sum2G, tLt in comp_N
     if Bt: r=sum_vt([T,Bt])[-1]; add_F(T,Bt,'Bt',r); dF_ += [comp_F(T,Bt,r,root)]
@@ -610,7 +616,7 @@ def add_F(T, Ft, nF, r=1, merge=1):
                 N.fin = 1; N.root = T; _c,c = T.c,N.c
                 _,_,_,C,R = sum_vt([T,N])
                 if hasattr(T,'m_'): T.r = np.sum([o*T.r for o in N.o_]); T.rN_+=N.rN_; T.m_+=N.m_; T.o_+=N.o_
-                T.Ct.H[-1] += N.rN_  # draft
+                T.C_ += N.rN_  # draft
                 A,a = T.angl[0],N.angl[0]; A[:] = (A*_c+a*c) / C  # vect only
                 T.baseT = (T.baseT*_c + N.baseT*c) /C
                 T.mang = (T.mang*_c + N.mang*c) /C
