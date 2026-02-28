@@ -187,7 +187,7 @@ def comp_N_(iN_, pairs, r, tnF=None, rL=None):  # incremental-distance cross_com
         else:
             dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
             N.pL_+= [[dist,dy_dx,_N]]; _N.pL_+= [[dist,-dy_dx,N]]
-        N.pL_.sort(key=lambda x: x[0])  # proximity prior, test compared?
+        N.pL_.sort(key=lambda x: x[0]); _N.pL_.sort(key=lambda x: x[0])  # proximity prior, test compared? (we need to sort both?)
     N_,L_,dpTT, TTd,cd = [],[],np.zeros((2,9)),np.zeros((2,9)),0  # any global use of dLs, rd?
     for N in iN_:
         pVt_ = []  # [[dist, dy_dx, _N, V]]
@@ -323,10 +323,10 @@ def comp_C_(C_, r,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s,
     if fall:
         pairs = product(C_,_C_) if _C_ else combinations(C_,r=2)  # comp between | within list
         for _C, C in pairs:
-            if _C is C: dtt = np.array([C.dTT[1],np.zeros(9)]); TTm+=dtt; cm=1  # overlap=match
+            if _C is C: dtt = np.array([C.dTT[1],np.zeros(9)]); TTm+=dtt; cm+=1  # overlap=match  (cm += 1?)
             else:
                 dtt = base_comp(_C,C)[0]; m,d = vt_(dtt,r)  # or comp_n, packing L_?
-                dC = CN(nt=[_C,C],dTT=dtt,m=m,d=d,c=_C.c+C.c, span=np.hypot(*_C.yx-C.yx))
+                dC = CN(nt=[_C,C],dTT=dtt,m=m,d=d,c=_C.c+C.c,r=r, span=np.hypot(*_C.yx-C.yx))  # r = input r?
                 L_+= [dC]; _C.rim.N_ += [dC]; C.rim.N_ += [dC]
         if fC:
             _C_= C_; C_,exc_ = [],[]
@@ -354,7 +354,7 @@ def comp_C_(C_, r,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s,
     for N in N_: N.rim = sum2f(N.rim.N_,'rim',N)
     TTd,cd = np.zeros((2,9)),0
     for L in L_:
-        if L.m > ave* (connw+r): mL_+= [L]; N_+= L.nt
+        if L.m > ave* (connw+r): mL_+= [L]; N_+= L.nt; cm += L.c  # add cm here?
     if mL_:
         _,_,tt,c,r = sum_vt(mL_); rc=c/cm; TTm+=tt*rc; R+=r*rc; cm+=c
     return list(set(N_)), mL_,TTm,cm,R,TTd,cd
@@ -387,8 +387,6 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
                     if tL.m > ave*connw:  # merge trans_link.nt.roots
                         rt0 = getattr(tL.nt[0].root,'root',None); rt1 = getattr(tL.nt[1].root,'root',None)  # CNs
                         if rt0 and rt1 and rt0!=rt1: add_F(rt0, rt1, nF,merge=1)  # concat in higher G
-                        # rt0 = tL.nt[0].root.root; rt1 = tL.nt[1].root.root
-                        # if rt0 != rt1: add_F(rt0, rt1, nF, merge=1)
             L.Nt=CF()  # reset, reset r in comb_Ft
 
     G_ = []  # add prelink pL_,pN_? include merged Cs, in feature space for Cs
@@ -486,9 +484,8 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
         for n in [N for C in C_ for N in C.N_]:  # exemplar V + sum n match_dev to Cs, m* ||C rvals:
             n.exe = (n.d if n.typ==1 else n.m) + np.sum([m-ave*o for m, o in zip(n.m_, n.o_)]) - ave
         if val_(DTT, r+olp, TTw(Ft), (len(C_)-1)*Lw) > 0:
-            root = Ft.root; Ct0 = root.Ct
+            root = Ft.root
             Ct = sum2F(C_,'Ct',root, fCF=0)
-            if Ct0: Ct.H += [Ct0]; Ct.dTT+=Ct0.dTT; Ct.r=Ct0.r; Ct.c=Ct0.c; Ct.m,Ct.d=vt_(Ct.dtt,Ct.r)
             _, r = cross_comp(Ct,r)  # all distant Cs, seq C_ in eigenvector = argmax(root.wTT)? Nt|Ct priority eval?
     return C_, r
 
@@ -559,7 +556,7 @@ def sum2G(ft_, root=None, init=1, typ=None):
         if lm*ld* ((len(G.N_)-1)*Lw) > ave*avd* (lr+1)*cw:
             V = lm - ave*(lr+1) * connw
             if V > 0:
-                if (mdecay(N_)-decay) * V > ave*centw: cluster_C(G.Nt, N_,r+1)
+                if (mdecay(N_)-decay) * V > ave*centw: cluster_C(G.Nt, N_,r+1)  # mdecay should be eval based on links instead of N_? Or this is a special case for Ns in centroid clustering?
                 else: cluster_N(G.Nt, N_,r+1)
     if G.Bt:
         Bt = G.Bt; bd,br = Bt.d,Bt.r
@@ -570,7 +567,7 @@ def sum2G(ft_, root=None, init=1, typ=None):
 
 def comb_Ft(Nt, Lt, Bt, Ct, root, fN=0):  # default Nt
 
-    if fN: T = CN(dTT=deepcopy(Nt.dTT), c=Nt.c,r=Nt.r, root=root); T.Nt=CopyF(Nt,root=T)  # forks in sum2G, no comp?
+    if fN: T = CN(dTT=deepcopy(Nt.dTT), c=Nt.c,r=Nt.r, root=root); T.Nt=CopyF(Nt,root=T); T.N_ = []; add_F(T,Nt,'Nt',Nt.r)  # forks in sum2G, no comp? (N_ and ext params are appended in add_F, we still need to copy Nt, else Nt's params are empty)
     else:  T = CF(N_=[Nt,Lt,Bt,Ct], nF='tFt',dTT=deepcopy(Nt.dTT), c=Nt.c,r=Nt.r,root=root)  # trans-links in comp_N
     dF_ = []
     if Lt: r=sum_vt([T,Lt])[-1]; add_F(T,Lt,'Lt',r); dF_ += [comp_F(T,Lt,r,T.Nt)]; T.Nt.Lt = Lt  # or update in add_F? Lt in sum2G, tLt in comp_N
@@ -591,7 +588,7 @@ def add_F(T, Ft, nF, r=1, merge=1):
                 if Lev: add_F(Lev,lev, nF, r)
                 else:   H.append(CopyF(lev, root))
         return list(H)
-    G = T.root  # add ext attrs in G from Nt + Lt:
+    G = T.root if isinstance(T, CF) else T  # add ext attrs in G from Nt + Lt:
     if nF =='Lt':  # or abs(typ)==1?
         L_ = Ft.N_
         if Ft.m > ave*specw:  # comp typ -1 pre-links
@@ -606,7 +603,7 @@ def add_F(T, Ft, nF, r=1, merge=1):
     elif nF =='Nt':
         N_ = Ft.N_; yx_ = []
         T.N_ += N_ if merge else [Ft]  # also merge L_?
-        if T.H and Ft.H: T.H = sum_H(T.H,Ft.H, r,T)  # or per N?
+        if isinstance(T, CF) and T.H and Ft.H: T.H = sum_H(T.H,Ft.H, r,T)  # or per N? (H should be per Ft? If T is CG, use T.Nt instead? )
         for N in N_:
             N.fin = 1; N.root = T; c = N.c
             if hasattr(T,'m_'): T.r = np.sum([o*T.r for o in N.o_]); T.rN_+=N.rN_; T.m_+=N.m_; T.o_+=N.o_
@@ -616,7 +613,7 @@ def add_F(T, Ft, nF, r=1, merge=1):
             G.box = extend_box(T.box, N.box)
             yx_ += [N.yx]
         G.yx = yx = np.mean(yx_, axis=0); dy_,dx_= (np.array(yx_)-yx).T
-        G.span = np.hypot(dy_,dx_).mean()
+        G.span = np.hypot(dy_,dx_).mean() if len(N_)> 1 else N.span  # use the same span for singleton
     return T
 
 def sum_vt(N_, rr=0, rm=0, rd=0, root=None):  # weighted sum of CN|CF list
