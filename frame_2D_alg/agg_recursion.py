@@ -568,8 +568,8 @@ def comb_Ft(Nt, Lt, Bt, Ct, root, fN=0):  # default Nt
 
     T = CopyF(Nt)
     if fN:
-        T = CN(Nt=T,dTT=Nt.dTT,c=Nt.c,r=Nt.r,root=root)
-        add_Nt(root if isinstance(root,CN) else root.root, Nt)
+        T = CN(Nt=T,dTT=Nt.dTT,c=Nt.c,r=Nt.r,root=root); T.Nt.root = T  # reassign root
+        add_Nt(T, Nt, merge=2)
     else:
         T.N_ = [Nt,Lt,Bt,Ct]; T.root=root  # nested tFt
         # dLt root: _Nt = T.Nt if fN else Nt?
@@ -582,13 +582,14 @@ def comb_Ft(Nt, Lt, Bt, Ct, root, fN=0):  # default Nt
     return T
 
 def add_Nt(G, Nt, merge=1):
-
-    if G.H and Nt.H:  # only in Nt, Ct if separate?
-        for Lev,lev in zip_longest(G.H, Nt.H):  # bottom-up
+    
+    # G is always CN, so it's always G.Nt.H?
+    if merge != 2 and G.Nt.H and Nt.H:  # only in Nt, Ct if separate?
+        for Lev,lev in zip_longest(G.Nt.H, Nt.H):  # bottom-up
             if lev:
-                if Lev: sum_vt([Lev,lev],root=Lev)
-                else: G.H.append(CopyF(lev, G))
-    N_ = Nt.N_  # G.N_ += N_ if merge else [Nt]  # also merge L_?
+                if Lev: sum_vt([Lev,lev],root=Lev, fappend=1)
+                else: G.Nt.H.append(CopyF(lev, G))
+    N_ = Nt.N_; G.N_ +=  ([] if merge == 2 else N_) if merge else [Nt]  # also merge L_?
     yx_ = []; C = G.c + Nt.c  # or G is empty?
     for N in N_:
         N.fin = 1; N.root = G; c = N.c
@@ -614,7 +615,7 @@ def add_Lt(Nt, Lt):
     G.mang = np.mean([comp_A(G.angl[0], l.angl[0])[0] for l in G.L_])  # Ls only?
     Nt.Lt  = Lt
 
-def sum_vt(N_, rr=0, rm=0, rd=0, root=None):  # weighted sum of CN|CF list
+def sum_vt(N_, rr=0, rm=0, rd=0, root=None, fappend=0):  # weighted sum of CN|CF list
 
     C = sum(n.c for n in N_); R = 0; TT = np.zeros((2,9))
     for n in N_:
@@ -622,7 +623,8 @@ def sum_vt(N_, rr=0, rm=0, rd=0, root=None):  # weighted sum of CN|CF list
     m,d = vt_(TT,R+rr)
     m-=rm; d-=rd  # deviations from tentative m,d
     if root:
-        root.dTT=TT; root.r=R; root.c=C; root.m=m; root.d=d; root.N_=N_  # or add?
+        root.dTT=TT; root.r=R; root.c=C; root.m=m; root.d=d; 
+        if fappend: root.N_+=N_  # or add?  I think merge N_? But for  sum_vt([Lev,lev],root=Lev, fappend=1), Lev.N_ can't be [Lev, lev] again?
     return m,d, TT, C,R
 
 def sum2f(n_, nF, root, fset=1):
@@ -682,7 +684,7 @@ def mdecay(L_):  # slope function
     L_ = sorted(L_, key=lambda l: l.span)
     dm_ = np.diff([l.m/l.c for l in L_])
     ddist_ = np.diff([l.span for l in L_])
-    return -(dm_ / (ddist_ + eps)).mean()  # -dm/ddist
+    return (-(dm_ / (ddist_ + eps)).mean()) if np.any(ddist_) else 0  # -dm/ddist (for single L, their ds are empty, so 0 decay?)
 
 def CopyF(F, root=None, r=1):  # F = CF
     C = CF(dTT=F.dTT*r, m=F.m, d=F.d, c=F.c, r=F.r, root=root or F.root)
