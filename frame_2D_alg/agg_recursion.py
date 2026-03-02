@@ -187,7 +187,7 @@ def comp_N_(iN_, pairs, r, tnF=None, rL=None):  # incremental-distance cross_com
         else:
             dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
             N.pL_+= [[dist,dy_dx,_N]]; _N.pL_+= [[dist,-dy_dx,N]]; N_ += [N,_N]
-    if not N_: return
+    if not N_: return [],[],TT,C,R, np.zeros((2,9)),0  # prevent unpacking error
     for N in set(N_): N.pL_.sort(key=lambda x: x[0])  # proximity prior, test compared?
     N_,L_,dpTT, TTd,cd = [],[],np.zeros((2,9)),np.zeros((2,9)),0  # any global use of dLs, rd?
     for N in iN_:
@@ -208,7 +208,7 @@ def comp_N_(iN_, pairs, r, tnF=None, rL=None):  # incremental-distance cross_com
                 pVt_ += [[dist,dy_dx,_N,m]]  # for next rim eval
             else: break  # beyond induction range
     for N in set(N_):
-        if N.rim: N.rim = sum_vt(N.rim.N_,root=getattr(N,'rim'))
+        if N.rim: sum_vt(N.rim.N_,root=getattr(N,'rim'))  # sum_vt doesn't return CF
     return list(set(N_)), L_,TT,C,R, TTd,cd  # + dpTT for code-fitting backprop
 
 def comp_N(_N,N, r, full=1, A=np.zeros(2),span=None, rL=None):
@@ -336,7 +336,7 @@ def comp_C_(C_, r,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s,
                 if val_(L.dTT, r+nw, wTTf,fi=0) < 0:  # merge similar but distant centroids, they are non-local
                     _c,c = L.nt
                     if _c is c or c in exc_: continue  # not yet merged
-                    for n in c.N_: add_Nt(_c, n, merge=0); _N_ = _c.N_; _N_ += [n]
+                    add_Nt(_c, c.Nt, merge=0)  # should be just merging c.Nt.N_ into _c here?
                     for l in c.rim.N_: l.nt = [_c if n is c else n for n in l.nt]
                     C_ += [_c]; exc_+=[c]
                     if c in C_: C_.remove(c)
@@ -352,7 +352,7 @@ def comp_C_(C_, r,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s,
             dy_dx = _C.yx-C.yx; dist = np.hypot(*dy_dx)
             L_ += [comp_N(_C,C, r,A=dy_dx,span=dist)]  # or comp_derT?
     mL_=[]
-    for N in N_: N.rim = sum_vt(N.rim.N_,root=getattr(N,'rim'))
+    for N in N_: sum_vt(N.rim.N_,root=getattr(N,'rim'))
     TTd,cd,R = np.zeros((2,9)),0,0
     for L in L_:
         if L.m > ave*(connw+r): mL_+= [L]; N_+= L.nt
@@ -571,9 +571,10 @@ def comb_Ft(Nt, Lt, Bt, Ct, root, fN=0):  # default Nt
     if fN: T = CN(Nt=T,dTT=Nt.dTT,c=Nt.c,r=Nt.r,root=root); T.Nt.root=T; add_Nt(T,Nt)
     else: T.N_ = [Nt,Lt,Bt,Ct]; T.root=root  # nested tFt
     dF_ = []  # comp_N tFs | sum2G dFs
-    if Lt: sum_vt([T,Lt],root=T.Nt); add_Lt(T.Nt, Lt); dF_ += [comp_F(T,Lt, T.r,T.Nt)]  # Lt in sum2G, tLt in comp_N
-    if Bt: sum_vt([T,Bt],root=T); T.Bt=Bt; dF_ += [comp_F(T,Bt, T.r,root)]  # no ext pars?
-    if Ct: sum_vt([T,Ct],root=T); T.Ct=Ct; dF_ += [comp_F(T,Ct, T.r,root)]
+    # f2 should be true here to merge Ft.N_ into T.N_?
+    if Lt: sum_vt([T,Lt],root=T,f2=1); add_Lt(T.Nt, Lt); dF_ += [comp_F(T,Lt, T.r,T.Nt)]  # Lt in sum2G, tLt in comp_N
+    if Bt: sum_vt([T,Bt],root=T,f2=1); T.Bt=Bt; dF_ += [comp_F(T,Bt, T.r,root)]  # no ext pars?
+    if Ct: sum_vt([T,Ct],root=T,f2=1); T.Ct=Ct; dF_ += [comp_F(T,Ct, T.r,root)]
     if dF_:
         m,d,tt,c,r = sum_vt(dF_,root=getattr(T,'Lt'))  # cross-fork covariance
         R=T.root; rc=c/(R.c+c); R.dTT+=(tt-R.dTT)*rc; R.r+=(r-R.r)*rc; R.c+=c  # G
@@ -623,7 +624,7 @@ def sum_vt(N_, rr=0, rm=0, rd=0, root=None, merge=1, f2=0):  # weighted sum of C
     if root:
         root.dTT=TT; root.r=R; root.c=C; root.m=m; root.d=d
         if merge:
-            n_ = N_[1].N_ if f2 else N_; root.N_+=n_ # f2: two Ns, merge 2nd into 1st
+            n_ = N_[1].N_ if f2 else N_; setattr(root, 'N_', (root.N_+n_) if merge == 1 else n_)  # f2: two Ns, merge 2nd into 1st (merge == 2 to reassign n_, as in Bt from vect_edge)
             for n in n_: n.root=root
     return m,d, TT, C,R
 
@@ -679,7 +680,8 @@ def mdecay(L_):  # slope function
 
 def CopyF(F, root=None, r=1):  # F = CF
     C = CF(dTT=F.dTT*r, m=F.m, d=F.d, c=F.c, r=F.r, root=root or F.root)
-    C.N_ = [(Copy_(N,root=C) if isinstance(N, CN) else (CopyF(N,root=C) if isinstance(N, CF) else [])) for N in F.N_]  # flat
+    # looks like we should preserve F.N_ after the copy since we need to access the same N via rim
+    C.N_ = [(N if isinstance(N, CN) else (CopyF(N,root=C) if isinstance(N, CF) else [])) for N in F.N_]  # flat
     return C
 
 def Copy_(N, root=None, init=0, typ=None):
@@ -849,7 +851,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                 N_ = [PP2N(PPm) for PPm in PPm_]
                 for PPd in edge.link_: PP2N(PPd)
                 for N in N_:
-                    if N.B_: N.Bt = sum_vt([B.root for B in N.B_], root=getattr(N,'Bt'))
+                    if N.B_: sum_vt([B.root for B in N.B_], root=getattr(N,'Bt'),merge=2)
                 if val_(sum_vt(N_)[2], 3, TTw(tile), (len(PPm_)-1)*Lw) > 0:
                     G_,TT,C = trace_edge(N_,G_,TT,C,3,tile)  # flatten, cluster B_-mediated Gs, init Nt
     if G_:
