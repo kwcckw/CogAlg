@@ -57,7 +57,8 @@ def prop_F_(F):  # factory function to get and update top-composition fork.N_
 
 class CN(CBase):
     name = "node"
-    N_,C_,L_,B_,rim = prop_F_('Nt'),prop_F_('Ct'),prop_F_('Lt'),prop_F_('Bt'),prop_F_('rim')  # ext|int- defined nodes,links, add Xt?
+    # add X_? we shouldn't have rim here, else N.rim is actually accessing their rim.N_
+    N_,C_,L_,B_,X_ = prop_F_('Nt'),prop_F_('Ct'),prop_F_('Lt'),prop_F_('Bt'),prop_F_('Xt')  # ext|int- defined nodes,links, add Xt?
     def __init__(n, **kwargs):
         super().__init__()
         n.typ = kwargs.get('typ', 0)
@@ -67,8 +68,8 @@ class CN(CBase):
         # 3= Cn: + m_,d_,r_,o_ in C.rN_
         n.m, n.d, n.c, n.r = [kwargs.get(x,0) for x in ('m','d','c','r')]  # combined forks
         n.dTT = kwargs.get('dTT',np.zeros((2,9)))  # Nt+Lt dTT: m_,d_ [M,D,n, I,G,a, L,S,A]
-        n.rim = kwargs.get('rim',CF(root=n))  # external links, rng-nest?
-        n.Nt, n.Bt, n.Ct, n.Lt, n.Xt = ((kwargs.get(f) if f in kwargs else CF(root=n) for f in ('Nt','Bt','Ct','Lt','Xt')))
+        # n._rim = kwargs.get('rim',CF(root=n))  # external links, rng-nest? (rim could be packed below? )
+        n.Nt, n.Bt, n.Ct, n.Lt, n.Xt, n.rim = ((kwargs.get(f) if f in kwargs else CF(root=n) for f in ('Nt','Bt','Ct','Lt','Xt','rim')))
         # all from clustering,-> CN if nest, Ct||Nt, add cross-fork Xt?
         n.nt  = kwargs.get('nt',[])  # L nodet
         n.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,A: not ders, in links for simplicity, mostly redundant
@@ -178,7 +179,7 @@ def comp_N_(iN_, pairs, r, tnF=None, rL=None):  # incremental-distance cross_com
         else:
             dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
             N.pL_+= [[dist,dy_dx,_N]]; _N.pL_+= [[dist,-dy_dx,N]]; N_ += [N,_N]
-    if not N_: return 0,0,0,r,0,0
+    if not N_: return 0,0,0,0,r,0,0
     for N in set(N_): N.pL_.sort(key=lambda x: x[0])  # proximity prior, test compared?
     N_,L_,dpTT, TTd,cd = [],[],np.zeros((2,9)),np.zeros((2,9)),0  # any global use of dLs, rd?
     for N in iN_:
@@ -548,6 +549,11 @@ def sum2G(ft_, root=None, init=1, typ=None):
             if V > 0:
                 if (mdecay(L_)-decay) * V > ave*centw: cluster_C(G.Nt, N_,r+1)
                 else: cluster_N(G.Nt, N_,r+1)
+                
+    # agg+ for G.Nt
+    if val_(G.Nt.dTT, G.r+nw, TTw(G.Nt), mw=(len(G.Nt.N_)-1)*Lw) > 0:  # cost here should be very high
+        cross_comp(G.Nt, G.Nt.r,'Nt') 
+
     if G.Bt:
         Bt = G.Bt; bd,br = Bt.d,Bt.r
         if bd > avd*br*nw and typ!=1: cross_comp(Bt, br,'Bt')  # no ddfork
@@ -557,9 +563,9 @@ def sum2G(ft_, root=None, init=1, typ=None):
 
 def comb_Ft(Nt, Lt, Bt, Ct, root, fN=0):  # root = G|L, default Nt
 
-    r = root.r  # new G.Fs / sum2G | old L.tFs ->L.N_ / comp_N:
+    r = max(1, root.r)  # new G.Fs / sum2G | old L.tFs ->L.N_ / comp_N:  (r could be empty when it is inherited from tile)
     T = CopyF(Nt)
-    if fN: G = CN(Nt=T,dTT=Nt.dTT,c=Nt.c,r=r,root=root)  # new G / sum2G
+    if fN: G = CN(Nt=T,dTT=Nt.dTT,c=Nt.c,r=r,root=root); T.root=G  # new G / sum2G  (update Nt.root)
     else:  G = root; G.N_ = [Nt,Lt,Bt,Ct]  # keep L
     dF_ = []
     if Lt: sum_vt([T,Lt],root=G); dF_+= [comp_F(T,Lt, r,G)]  # Lt in sum2G, L.tLt in comp_N
@@ -605,6 +611,7 @@ def add_Lt(G, Lt):  # addition to sum_vt
     A = np.sum([l.angl[0] for l in L_], axis=0) if L_ else np.zeros(2)
     G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # add weighting?
     G.mang = np.mean([comp_A(G.angl[0], l.angl[0])[0] for l in G.L_])  # Ls only?
+    G.Lt = Lt  # we need to update Lt?
 
 def sum_vt(N_, rr=0,rm=0,rd=0, root=None, merge=0, f2=0):  # weighted sum of CN|CF list
 
@@ -842,7 +849,7 @@ def vect_edge(tile, rV=1, wTT=None):  # PP_ cross_comp and floodfill to init foc
                 N_ = [PP2N(PPm) for PPm in PPm_]
                 for PPd in edge.link_: PP2N(PPd)
                 for N in N_:
-                    if N.B_: sum_vt([B.root for B in N.B_], root=getattr(N,'Bt'),merge=2)
+                    if N.B_: B_ = [B.root for B in N.B_]; sum_vt(B_, root=getattr(N,'Bt'),merge=0); N.Bt.N_ = B_; [setattr(B, 'root', N.Bt) for B in B_]
                 if val_(sum_vt(N_)[2], 3, TTw(tile), (len(PPm_)-1)*Lw) > 0:
                     G_,TT,C = trace_edge(N_,G_,TT,C,3,tile)  # flatten, cluster B_-mediated Gs, init Nt
     if G_:
