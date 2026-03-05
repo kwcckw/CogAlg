@@ -182,7 +182,7 @@ def comp_N_(iN_, pairs, r, tnF=None, rL=None):  # incremental-distance cross_com
     N_,L_,dpTT, TTd,cd = [],[],np.zeros((2,9)),np.zeros((2,9)),0  # any global use of dLs, rd?
     for N in iN_:
         pVt_ = []  # [[dist, dy_dx, _N, V]]
-        for dist, dy_dx, _N in N.pL_:  # rim angl is not canonic
+        for dist, dy_dx, _N in N.pL_:  # rim angl is not canonic  (we addd pL_ bidirectionally, so so they will be compared twice here, just different order of N and _N?)
             pTT = proj_V(_N,N, dist, pVt_, rL.m if rL else decay** (dist/((_N.span+N.span)/2)))
             lr = r+ (N.r+_N.r) / 2; m,d = vt_(pTT,lr)  # +|-match certainty
             if m > 0:
@@ -214,13 +214,13 @@ def comp_N(_N,N, r, full=1, A=np.zeros(2),span=None, rL=None):
 
     TT= base_comp(_N,N)[0] if full else comp_derT(_N.dTT[1],N.dTT[1]); m,d = vt_(TT,r)
     L = CN(typ=1, nt=[_N,N], dTT=TT, m=m, d=d, c=min(N.c,_N.c), r=r, root=rL, exe=1)
-    if N.typ and m > ave*nw:
+    if N.typ>0 and m > ave*nw:  # prevent typ == -1 in B fork
         dH,htt,C,R = comp_H(_N.Nt, N.Nt, L); r=R  # tentative subcomp
         if m + vt_(htt,R/C)[0] > ave*nw:  # subcomp -> tFs in L:
             if abs(N.typ) ==1:
                 for n,_n in product(_N.nt,N.nt): L.Nt.fb_ += [comp_N(n,_n,r)]  # link sub-comp
             else:
-                for i, _Ft,Ft, tnF in enumerate(zip((_N.Nt,_N.Lt,_N.Bt,_N.Ct),(N.Nt,N.Bt,N.Ct,N.Lt),('Nt','Lt','Bt','Ct'))):
+                for i, (_Ft,Ft, tnF) in enumerate(zip((_N.Nt,_N.Lt,_N.Bt,_N.Ct),(N.Nt,N.Lt,N.Bt,N.Ct),('Nt','Lt','Bt','Ct'))):  # sequence of N is wrong
                     if _Ft and Ft:  # sub-comp
                         dFt = comp_F(_Ft,Ft,r,L); getattr(L,tnF).fb_+=[dFt]  # trans-fork feedback
                         r+= 1-i  # Nt,Lt are core, not redundant
@@ -258,7 +258,7 @@ def base_comp(_N,N):  # comp Et, baseT, extT, dTT
 
     _M,_D,_c = _N.m,_N.d,_N.c; _I,_G,_Dy,_Dx =_N.baseT; _L = len(_N.N_)  # N_: density within span
     M, D, c = N.m, N.d, N.c; I, G, Dy, Dx = N.baseT; L = len(N.N_)
-    rn = _c/c
+    rn = _c/c  # we apply _c with the same rn again?
     _pars = np.array([_M*rn,_D*rn,_c*rn,_I*rn,_G*rn, [_Dy,_Dx],_L*rn,_N.span], dtype=object)  # Et, baseT, extT
     pars  = np.array([M,D,c, (I,wI),G, [Dy,Dx], L,(N.span,wS)], dtype=object)
     mA,dA = comp_A(_N.angl[0]*_N.angl[1], N.angl[0]*N.angl[1])
@@ -358,7 +358,7 @@ def get_exemplars(N_,r):  # multi-layer non-maximum suppression -> sparse seeds 
         # ave *= rV of overlap by stronger-E inhibition zones:
         if N.Rt.m * N.c > ave * (r+rdn+nw+ roV):
             E_.update({n for l in N.rim for n in l.nt if n is not N and N.Rt.m > ave*r})
-            N.exe = 1  # in point cloud of focal nodes
+            N.exe = 1  # in point cloud of focal nodes  (N.exe is 1, but never added to E? We didn't update E.exe here?)
         else:
             break  # the rest of N_ is weaker, trace via rims
     return E_
@@ -442,7 +442,7 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                     if oL_: m += sum_vt(oL_,rr=cr,rm=m)[0]  # add deviation from redundant mC, add eval?
                     if m > 0 and nm > Ave * odm:
                         N_+=[n]; L_+=n.L_; M+=m; O+=odm; m_+=[nm]; o_+=[odm]  # n.o for convergence eval
-                        N__ += [_n for l in n.rim for _n in l.nt if _n is not n]  # +|-Ls
+                        N__ += [_n for l in n.rim for _n in l.nt if (_n is not n and _n in Ft.N_)]   # +|-Ls (so mediated _n must be in Ft.N_ too)
                         if _C not in n._C_: dm+=m; do+=odm  # not in extended _N__
                     else:
                         if _C in n._C_: i = n._C_.index(_C); dm+=n._m_[i]; do+=n._o_[i]
@@ -452,14 +452,13 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                 if M > Ave * len(N_) * O and val_(dTT, cr+O, TTw(_C),(len(N_)-1)*Lw):
                     C = sum2C(N_,_C,_Ci=None)
                     for n,m,o in zip(N_,m_,o_):
-                        if _C in n.rN_: i = n.rN_.index(_C); n.rN_.pop(i); n.m_.pop(i); n.o_.pop(i)  # clear stale _C mapping?
-                        n.m_+=[m]; n.o_+=[o]; n.rN_+= [C]; C.rN_+= [n]  # reciprocal root assign
+                        if _C in n.rN_: i = n.rN_.index(_C); n.rN_[i]=C; n.m_[i]=m; n.o_[i]=o  # reciprocal root replacement
                     C._N_ = list(set(N__)-set(N_))  # frontier
                     C._L_ = set(L_)  # peer links
                     if D< Avd*len(N_)*O: __C_ += [C]  # stable
                     else: C_ += [C]; Dm+=dm; Do+=do  # reform in next loop
                 else:
-                    for n in _C._N_:  # not revised
+                    for n in _C._N_:  # not revised (this is still valid to remove _C from n.rN_?)
                         n.exe = n.m/n.c > 2 * ave  # refine exe
                         for i, c in enumerate(n.rN_):
                             if c is _C:  # remove _C-mapping m,o:
@@ -526,6 +525,7 @@ def sum2C(N_,_C, _Ci=None):  # fuzzy sum params used in base_comp
     for par_ in r_, dTT_, baseT_, span_, yx_:
         Par_.append(sum([p * c for p,c in zip(par_,c_)]))
     C = CN(c=tot, typ=0)
+    C.m_=[]; C._m_=[]; C.o_=[]; C._o_=[]  # init
     C.r, C.dTT, C.baseT, C.span, C.yx = [P / tot for P in Par_]
     C.m, C.d = vt_(C.dTT, C.r)
     C.Nt = CF(N_=N_,nF='Ct',dTT=deepcopy(C.dTT), m=C.m,d=C.d,c=C.c,r=C.r)
@@ -540,7 +540,7 @@ def sum2G(ft_, root=None, init=1, typ=None):
     for ft, nF in zip_longest(ft_,('Nt','Lt','Bt')):
         if ft: n_,_,tt,c,r = ft; Ft_+= [CF(N_=n_,nF=nF,dTT=tt,m=(vt:=vt_(tt,r))[0],d=vt[1],c=c,r=r)]
         else:  Ft_ += [CF()]
-    G = comb_Ft(*Ft_,[], root,1)  # Ct=[]
+    G = comb_Ft(*Ft_,CF(), root,1)  # Ct=[]
     N_= G.N_; N=N_[0]; G.sub = N.sub+1 if G.L_ else N.sub
     if typ is None: typ = N.typ
     G.typ=typ; r=G.r
@@ -565,7 +565,7 @@ def comb_Ft(Nt, Lt, Bt, Ct, root, fN=0):  # root = G|L, default Nt
 
     r = root.r  # new G.Fs / sum2G | old L.tFs ->L.N_ / comp_N:
     T = CopyF(Nt)
-    if fN: G = CN(Nt=Nt,Lt=Lt,Bt=Bt,Ct=Ct, root=root)  # new G / sum2G
+    if fN: G = CN(Nt=Nt,Lt=Lt,Bt=Bt,Ct=Ct, root=root); Nt.root=G; Lt.root=G; Bt.root=G; Ct.root=G  # new G / sum2G  (we need to assign Ft.root here)
     else:  G = root; G.N_ = [Nt,Lt,Bt,Ct]  # keep rL
     dF_ = []
     if Lt: dF_+= [comp_F(T,Lt, r,G)]; sum_vt([T,Lt],T)  # Lt in sum2G, L.tLt in comp_N
