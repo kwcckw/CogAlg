@@ -146,9 +146,9 @@ def cross_comp(Ft, ir, nF='Nt'):  # core function mediating recursive rng+ and d
 
     N_,G_ = Ft.N_,[]  # rc=rdn+olp, comp N_|B_|C_:
     L_,TT,c,r,TTd,cd,rd = comp_N_(combinations(N_,2),ir) if N_[0].typ<3 else comp_C_(N_,ir,fC=1); r+=ir
-    if L_:
-        if val_(TT, r+connw,TTw(Ft),(len(L_)-1)*Lw,1,TTd,r) > 0:  # add +|-Lt?
-            E_ = get_exemplars({N for L in L_ for N in L.nt if N.Rt.m >ave}, r)
+    if L_ and val_(TT, r+connw,TTw(Ft),(len(L_)-1)*Lw,1,TTd,r) > 0:  # add +|-Lt? (L_ eval can be moved to this eval now)
+        E_ = get_exemplars({N for L in L_ for N in L.nt if N.Rt.m >ave}, r)  # is this N.Rt eval redundat? We will eval in get_exemplars anyway
+        if E_:  # may empty if all Es have false eval?
             G_,r = cluster_N(Ft, E_,r)  # form Bt, cluster_C/P, sub+ in sum2G
             if G_:
                 Ft = sum2F(G_, nF, Ft.root)
@@ -194,7 +194,7 @@ def comp_N_(_pairs, r, tnF=None, rL=None):  # incremental-distance cross_comp, m
             else:
                 pL = CN(typ=-1, nt=[_N,N], dTT=pTT,m=m,d=d,c=min(N.c,_N.c), r=lr, angl=np.array([dy_dx,1],dtype=object),span=dist)
                 L_+= [pL]; N.rim+=[pL]; N_+=pL.nt; TT+=pTT; C+=pL.c  # ~= links in clustering
-                N_+= [_N,N]
+                # N_+= [_N,N]  This is redundant to the N_+=pL.nt above
         else: break  # beyond initial induction range, re-sort by proj_V?
     for N in set(N_):
         if N.rim: sum_vt(N.rim,getattr(N,'Rt'))
@@ -233,7 +233,7 @@ def comp_N(_N,N, r, full=1, A=np.zeros(2),span=None, rL=None):
         angl = [A, np.sign(TT[1] @ wTTf[1])]
         L.yx=yx; L.box=box; L.span=span; L.angl=angl; L.baseT=(_N.baseT+N.baseT)/2
     for n, _n in (_N,N),(N,_N):
-        n.rim += [L]; n.compared.add(_n)  # or unique comps?
+        n.rim += [L]; n.compared.add(_n)  # or unique comps? Why L is not added bidirectionally?
     return L
 
 def comp_F(_F, F, ir=0, rL=None):
@@ -247,7 +247,7 @@ def comp_F(_F, F, ir=0, rL=None):
             else: Np_ = list(product(_N_,N_))  # pairs
             if (rL.m+m)/2 * ((len(Np_)-1)*Lw) > ave * nw:
                 if f: L_= [comp_F(*Np, r,rL=dF) for Np in Np_]; _,_,TT,C,R = sum_vt(L_)
-                else: L_,TT,C,R,_,_= comp_N_( Np_, r,nF,rL)  # TTd,cd?
+                else: L_,TT,C,R,_,_,_= comp_N_( Np_, r,nF,rL)  # TTd,cd?
                 dF.N_ = L_
                 dF.m,dF.d,dF.dTT,dF.c,dF.r = sum_vt([dF,CF(dTT=TT,c=C,r=R)])
                 rL.m,rL.d,rL.dTT,rL.c,rL.r = sum_vt([rL,dF])
@@ -310,12 +310,12 @@ def comp_A(_A,A):
 def comp_C_(C_, r,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s, levels
     # max attr sort to constrain C_ search in 1D, add K attrs and overlap? proj C.L_?
 
-    N_,L_,TTm,cm = [],[],np.zeros((2,9)),0
+    N_,L_,TT,Cm,R = [],[],np.zeros((2,9)),0,0
     if fall:
         pairs = product(C_,_C_) if _C_ else combinations(C_,r=2)  # comp between | within list
         for _C, C in pairs:
             if _C is C:
-                dtt = np.array([C.dTT[1],np.zeros(9)]); TTm+=dtt; cm+=1  # overlap=match
+                dtt = np.array([C.dTT[1],np.zeros(9)]); TT+=dtt; Cm+=1  # overlap=match
             else:
                 dy_dx = _C.yx-C.yx; dist = np.hypot(*dy_dx)
                 L_ += [comp_N(_C,C, r, A=dy_dx,span=dist)]; N_ += [_C,C]
@@ -341,12 +341,12 @@ def comp_C_(C_, r,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s,
             L_ += [comp_N(_C,C, r,A=dy_dx,span=dist)]  # simplified for typ=3
             N_ += [_C,C]
     for N in list(set(N_)): sum_vt(N.rim, getattr(N,'Rt'))
-    TTd,cd,R = np.zeros((2,9)),0,0
+    TTd,Cd,Rd = np.zeros((2,9)),0,0
     for L in L_:
-        if L.m > ave*(connw+L.r): TTm+=L.dTT; cm+=L.c
-        else:                     TTd+=L.dTT; cd+=L.c
+        if L.m > ave*(connw+L.r): TT+=L.dTT; Cm+=L.c; R+=L.r*L.c
+        else:                     TTd+=L.dTT; Cd+=L.c; Rd+=L.r*L.c
         R += L.r
-    return L_,TTm,cm, R/len(L_), TTd,cd
+    return  L_,TT,Cm,R/(Cm or eps), TTd,Cd,Rd/(Cd or eps)
 
 def get_exemplars(N_,r):  # multi-layer non-maximum suppression -> sparse seeds for diffusive clustering, cluster_N too?
     E_, Inh_ = set(),set()
@@ -388,7 +388,7 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
                 _L_ = []
                 for L in __L_:  # flood-fill via frontier links
                     _N = L.nt[0] if L.nt[1].fin else L.nt[1]; in_.add(L)
-                    if not _N.fin and _N in _N_:
+                    if not _N.fin and _N in _N_:  # I guess we should remove _N in _N_ and use _N on Ft.N_? Else only exemplars will be clustered 
                         m,d = nt_vt(*L.nt)
                         if m > ave * (r-1):  # cluster nt, L,C_ by combined rim density:
                             N_ += [_N]; _N.fin = 1
@@ -435,7 +435,7 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                     m,d = vt_(dtt,cr); dTT += dtt; nm = m * n.c  # rm,olp / C
                     odm = np.sum([_m-nm for _m in n._m_ if _m>m])  # higher-m overlap
                     oL_ = set(n.rim) & _C._L_  # replace peer rim overlap with more precise m
-                    if oL_: _m,_d,_,_,_ = sum_vt(oL_,rr=cr,rm=m); m+=_m; d+=_d  # abs?
+                    if oL_: _m,_d,_,_,_ = sum_vt(oL_,rr=cr,rm=m); m+=_m; d+=_d  # abs?  (This _m replaces the _m from _Ct_? The rest of the ns are using this new _m? )
                     M += m; D += abs(d)
                     if m > 0 and nm > Ave * odm:
                         N_+=[n]; L_+=n.L_; O+=odm; m_+=[nm]; o_+=[odm]  # n.o for convergence eval
@@ -460,6 +460,7 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                         for i, c in enumerate(n.rN_):
                             if c is _C:  # remove _C-mapping m,o:
                                 n.rN_.pop(i); n.m_.pop(i);n.o_.pop(i); break
+                Dm += dm; Do += do  # accumulate Dm and Do here?
             else: break  # the rest is weaker
         for n in Ft.N_:
             n._C_ = n.rN_; n._m_= n.m_; n._o_= n.o_; n.rN_,n.m_,n.o_ = [],[],[]  # new n.Ct.N_s, combine with v_ in Ct_?
@@ -492,7 +493,7 @@ def cluster_P(_C_,N_,root):  # Parallel centroid refining, _C_ from cluster_C, N
         Ave = ave * (root.r+centw)
         if M > Ave*O and dM > Ave*dO:  # strong update
             _C_ = C_
-            for N in N_: N._m_,N._o_,N._d_,N._r_ = N.m_,N.o_,N.d_,N.rim
+            for N in N_: N._m_,N._o_,N._d_,N._r_ = N.m_,N.o_,N.d_,N.r_  # should be r_ here
         else: break
     out_ = []
     for i, C in enumerate(C_):
@@ -560,7 +561,7 @@ def comb_Ft(Nt, Lt, Bt, Ct, root, fN=0):  # root = G|L, default Nt
     r = root.r  # new G.Fs / sum2G | old L.tFs ->L.N_ / comp_N:
     T = CopyF(Nt)
     if fN: G = CN(Nt=Nt,Lt=Lt,Bt=Bt,Ct=Ct, root=root); Nt.root=G; Lt.root=G; Bt.root=G; Ct.root=G  # new G / sum2G
-    else:  G = root; G.N_ = [Nt,Lt,Bt,Ct]  # keep rL
+    else:  G = root; G.Nt = CF(N_ = [Nt,Lt,Bt,Ct], root=G)  # keep rL (Nt is L.Nt, so it becomes L.Nt.N_ = [L.Nt,..], and we need to reassign new CF, sum their other params such as dTT, r, o, and recompute m, d?)
     dF_ = []
     if Lt: dF_+= [comp_F(T,Lt, r,G)]; sum_vt([T,Lt],T)  # Lt in sum2G, L.tLt in comp_N
     if Bt: dF_+= [comp_F(T,Bt, r,G)]; sum_vt([T,Bt],T)  # * brrw /G update?
