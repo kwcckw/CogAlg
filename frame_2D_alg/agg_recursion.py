@@ -257,7 +257,7 @@ def comp_N(_N,N, r, full=1, A=np.zeros(2),span=None, rL=None, L_=None, N_=None, 
                         dFt = comp_F(_Ft,Ft,r,L); getattr(L,tnF).fb_+=[dFt]  # trans-fork feedback
                         r = (i or 1) -1  # Nt,Lt are core, not redundant
             for ft_, nF in zip((L.Nt.fb_,L.Lt.fb_,L.Bt.fb_,L.Ct.fb_),('Nt','Lt','Bt','Ct')):
-                if ft_: sum_vt(ft_,getattr(L,nF))  # python-batched bottom-up
+                if ft_: sum_vt(ft_,getattr(L,nF)); getattr(L,nF).N_=ft_  # python-batched bottom-up (why N_ is not updated? Else their if Ft's eval beoomes false)
             comb_Ft(L.Nt,L.Lt,L.Bt,L.Ct, L)  # trans-link Ft_->L.N_
     if full:
         if span is None: span = np.hypot(*_N.yx - N.yx)
@@ -369,12 +369,14 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
         return M, D
     def trans_cluster(G):
         for L in G.L_:
-            for tFt, nF in zip(L.Nt.N_, ('Nt','Bt','Ct')):  # Lt doesn't form trans-links
-                for tL in tFt.N_:
-                    if tL.m > ave*connw:  # merge trans_link.nt.roots
-                        rt0 = getattr(tL.nt[0].root,'root',None); rt1 = getattr(tL.nt[1].root,'root',None)  # CNs
-                        if rt0 and rt1 and rt0 !=rt1: add_Nt(rt0, rt1, merge=1)  # concat in higher G
-            L.Nt = CF()
+            # only Lt, Bt and Ct now in dF_?
+            if L.Xt.Lt:
+                for tFt, nF in zip(L.Xt.Lt.N_, ('Lt','Bt','Ct')):  # Lt doesn't form trans-links
+                    for tL in tFt.N_:
+                        if tL.m > ave*connw:  # merge trans_link.nt.roots
+                            rt0 = getattr(tL.nt[0].root,'root',None); rt1 = getattr(tL.nt[1].root,'root',None)  # CNs
+                            if rt0 and rt1 and rt0 !=rt1: add_Nt(rt0, rt1, merge=1)  # concat in higher G
+                L.Nt = CF()
     G_ = []  # add prelink pL_,pN_? include merged Cs, in feature space for Cs
     if _N_ and val_(Ft.dTT, r+connw, TTw(Ft), mw=(len(_N_)-1)*Lw) > 0:  #| fL?
         for N in _N_: N.fin=0; N.exe=1  # not sure
@@ -420,7 +422,7 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
         C = cent_TT(Copy_(E,Ft, init=2,typ=0), r)  # all rims in root, sequence along eigenvector?
         C._N_ = list({n for l in E.rim for n in l.nt if (n is not E and n in Ft.N_)})  # init C.N_=[]
         C._L_ = set(E.rim)  # init peer links
-        for n in C._N_+C.N_: nm = C.m*(n.c/C.c); n.m_+=[nm]; n._m_+=[nm]; n.o_+=[1]; n._o_+=[1]; n.rN_+=[C]; n._C_+=[C]
+        for n in C._N_+C.N_: nm = C.m*(n.c/C.c); n.m_+=[]; n._m_+=[nm]; n.o_+=[]; n._o_+=[1]; n.rN_+=[]; n._C_+=[C]
         _C_ += [C]
     oC_ = []  # output stable Cs
     while True:  # reform C_, add direct in-C_ cross-links for membership?
@@ -445,11 +447,13 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                     else:
                         if _C in n._C_: i = n._C_.index(_C); dm+=n._m_[i]; do+=n._o_[i]
                 DTT+=dTT; mat+=M; dif+=D; olp+=O; cnt+=cc
-                if M > Ave*O and val_(dTT, cr+O, TTw(_C),(len(N_)-1)*Lw):  # dTT is more precise?
+                if M > Ave*O and val_(dTT, cr+O, TTw(_C),(len(N_)-1)*Lw)>0:  # dTT is more precise?  (we need >0 since negative value gets true using if)
                     C = sum2C(N_, _C, _i=None, root=Ft)
-                    for n,m,o in zip(N_,m_,o_):
-                        if _C in n.rN_: i = n.rN_.index(_C); n.rN_[i]=C; n.m_[i]=m; n.o_[i]=o  # reciprocal root replacement
+                    for n,m,o in zip(N_,m_,o_): n.rN_ += [C]; n.m_+=[m]; n.o_+=[o] 
+                        # if _C in n.rN_:
+                        #     i = n.rN_.index(_C); n.rN_[i]=C; n.m_[i]=m; n.o_[i]=o  # reciprocal root replacement
                     C._N_ = list(set(N__)-set(N_))  # frontier
+                    for n in C._N_+C.N_: n._C_ += [C]; n._m_+=[m]; n._o_+=[o]  # we need to pack this into both now when we  refine all
                     C._L_ = set(L_)  # peer links
                     if D< Avd*O: oC_ += [C]  # output if stable, actually if val_(DTT, fi=0) + D?
                     else:        C_ += [C]  # reform
@@ -462,7 +466,7 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                 Dm+=dm; Do+=do
             else: break  # the rest is weaker
         for n in Ft.N_:
-            n._C_ = n.rN_; n._m_= n.m_; n._o_= n.o_; n.rN_,n.m_,n.o_ = [],[],[]  # new n.Ct.N_s, combine with v_ in Ct_?
+            n._C_ += n.rN_; n._m_+= n.m_; n._o_+= n.o_; n.rN_,n.m_,n.o_ = [],[],[]  # new n.Ct.N_s, combine with v_ in Ct_?
         if mat * dif * olp > ave*centw*2:
             oC_ = cluster_P(oC_, Ft.N_, Ft)  # refine all memberships in parallel by global backprop|EM
             break
@@ -502,8 +506,8 @@ def cluster_P(_C_,N_,root):  # Parallel centroid refining, _C_ from cluster_C, N
             keep = bool(C.N_)
         out_ += [C if keep else []]
     for N in N_:
-        for _v,v_ in zip((N._m_,N._d_,N._r_,N._o_), (N.m_,N.d_,N.r,N.o_)):
-            v_[:] = [v for v,c in zip(v_,out_) if c]; _v[:] = []
+        for _v_,v_ in zip((N._m_,N._d_,N._r_,N._o_), (N.m_,N.d_,N.r_,N.o_)):  # should be r_ here
+            v_[:] = [v for v,c in zip(v_,out_) if c]; _v_[:] = []
         N.rN_ = [c for c,keep in zip(N.rN_,out_) if keep]
 
     return [c for c in out_ if c]  # or full out_?
@@ -513,7 +517,7 @@ def sum2C(N_, _C, _i=None, root=None):  # fuzzy sum + base attrs for centroids
 
     cc_ = []
     for N in N_:
-        if _i is None: i = N.rN_.index(_C); m,o = N._m_[i], N._o_[i]  # cluster_C
+        if _i is None: i = N._C_.index(_C); m,o = N._m_[i], N._o_[i]  # cluster_C
         else:          m,o = N.m_[_i],N.o_[_i]  # current m_,o_ in cluster_P
         cc_ += [N.c * (m/(ave*o) * _C.m)]  # *_C.m: proj survival?
     Cc = sum(cc_)
@@ -529,7 +533,10 @@ def sum2G(ft_, root=None, init=1, typ=None):
 
     if not init:
         N_,_,ntt,nc,nr = ft_[0]; N_+=root.N_; ntt+=root.Nt.dTT; nc+=root.Nt.c; nr+=root.Nt.r; ft_[0] = N_,_,ntt,nc,nr
-        if len(ft_)>1: L_,_,ltt,lc,lr=ft_[1]; L_+=root.L_; ltt+=root.Nt.Lt.dTT; lc+=root.Nt.Lt.c; lr+=root.Nt.Lt.r; ft_[1]=L_,_,ltt,lc,lr
+        if len(ft_)>1: 
+            L_,_,ltt,lc,lr=ft_[1]; L_+=root.L_
+            if root.Nt.Lt: ltt+=root.Nt.Lt.dTT; lc+=root.Nt.Lt.c; lr+=root.Nt.Lt.r  # Lt may empty？
+            ft_[1]=L_,_,ltt,lc,lr  # this Nt.Lt is empty?
     Ft_ = []
     for ft, nF in zip_longest(ft_,('Nt','Lt','Bt')):
         if ft: n_,_,tt,c,r = ft; Ft_+= [CF(N_=n_,nF=nF,dTT=tt,m=(vt:=vt_(tt,r))[0],d=vt[1],c=c,r=r)]
@@ -561,12 +568,12 @@ def comb_Ft(Nt, Lt, Bt, Ct, root, fN=0):  # root = G|L, default Nt
     T = CopyF(Nt)  # temporary accumulator
     if fN: R = CN(Nt=Nt,Lt=Lt,Bt=Bt,Ct=Ct, root=root); Nt.root=R; Lt.root=R; Bt.root=R; Ct.root=R  # new G / sum2G
     else:  R = root.Xt  # keep root Link
-    dF_ = []
-    if Lt: dF_+= [comp_F(T,Lt, r,R)]; sum_vt([T,Lt],T)  # Lt in sum2G, L.tLt in comp_N
-    if Bt: dF_+= [comp_F(T,Bt, r,R)]; sum_vt([T,Bt],T)  # * brrw /G update?
-    if Ct: dF_+= [comp_F(T,Ct, r,R)]; sum_vt([T,Ct],T)  # * rdn /G update?
+    dF_ = [CF(),CF(),CF()]  # preserve index for trans cluster
+    if Lt: dF_[0] = comp_F(T,Lt, r,R); sum_vt([T,Lt],T)  # Lt in sum2G, L.tLt in comp_N
+    if Bt: dF_[1] = comp_F(T,Bt, r,R); sum_vt([T,Bt],T)  # * brrw /G update?
+    if Ct: dF_[2] = comp_F(T,Ct, r,R); sum_vt([T,Ct],T)  # * rdn /G update?
     sum_vt([R,T], R)
-    if dF_:
+    if any([1 for dF in dF_ if dF]):
         if fN: Xt = R.Xt; RR = R; dFt = Xt
         else:  Xt = R; RR = root; Xt.Lt = Xt.Lt or CF(root=Xt); dFt = Xt.Lt
         sum_vt(dF_,dFt, merge=1)  # cross-fork covariance, dFt.N_=dF_
@@ -695,7 +702,7 @@ def Copy_(N, root=None, init=0, typ=None):
             C.Lt=CopyF(N.Lt); C.Bt=CopyF(N.Bt)  # empty in init G
             C.angl = copy(N.angl); C.yx = copy(N.yx)
         if typ > 1:
-            C.rim = CopyF(N.Rt)
+            C.Rt = CopyF(N.Rt)  # should be copy Rt here
     if init==2:
         # should be init for C here, N might have filled _m_ from prior C
         C.N_ = [N]; C.m_=[]; C._m_=[]; C.o_=[]; C._o_=[]  # when copy for C, always single N_?
