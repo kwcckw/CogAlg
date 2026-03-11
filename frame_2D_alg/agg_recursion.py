@@ -70,6 +70,7 @@ class CN(CBase):
         n.Nt,n.Bt,n.Ct,n.Lt,n.Xt,n.Rt = ((kwargs.get(f) if f in kwargs else CF(root=n) for f in ('Nt','Bt','Ct','Lt','Xt','Rt')))
         # convert to CN if nest, Ct||Nt, add cross-fork Xt?
         n.nt  = kwargs.get('nt',[])  # L nodet
+        # replaces baseT? Only specific to agg+ here?
         n.kern = kwargs.get('kern',np.zeros(4))  # I,G,A: not ders, in links for simplicity, mostly redundant
         n.span = kwargs.get('span',1) # distance in nodet or aRad, comp with kern or len(N_)
         n.angl = kwargs.get('angl',[np.zeros(2),0])  # (dy,dx),dir, sum from L_
@@ -254,6 +255,7 @@ def comp_N(_N,N, r, full=1, A=np.zeros(2),span=None, rL=None, L_=None, N_=None, 
             else:
                 for i,(_Ft,Ft,tnF) in enumerate(zip((_N.Nt,_N.Lt,_N.Bt,_N.Ct),(N.Nt,N.Lt,N.Bt,N.Ct),('Nt','Lt','Bt','Ct'))):
                     if _Ft and Ft:  # sub-comp
+                        # always single element in fb), so actually L.Ft = dFt?
                         dFt = comp_F(_Ft,Ft,r,L); getattr(L,tnF).fb_+=[dFt]  # trans-fork feedback
                         r = (i or 1) -1  # Nt,Lt are core, not redundant
             for ft_, nF in zip((L.Nt.fb_,L.Lt.fb_,L.Bt.fb_,L.Ct.fb_),('Nt','Lt','Bt','Ct')):
@@ -370,10 +372,11 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
     def trans_cluster(G):
         for L in G.L_:
             for tFt in L.Nt,L.Bt,L.Ct:  # Lt doesn't form trans-links
-                for tL in tFt.N_:
-                    if tL.m > ave*connw:  # merge trans_link.nt.roots
-                        rt0 = getattr(tL.nt[0].root,'root',None); rt1 = getattr(tL.nt[1].root,'root',None)  # CNs
-                        if rt0 and rt1 and rt0 !=rt1: add_Nt(rt0, rt1, merge=1)  # concat in higher G
+                for dFt in tFt.N_:
+                    for tL in dFt.N_:
+                        if tL.m > ave*connw:  # merge trans_link.nt.roots
+                            rt0 = getattr(tL.nt[0].root,'root',None); rt1 = getattr(tL.nt[1].root,'root',None)  # CNs
+                            if rt0 and rt1 and rt0 !=rt1: add_Nt(rt0, rt1, merge=1)  # concat in higher G
             L.Nt,L.Bt,L.Ct = CF(),CF(),CF()
             # only to merge roots
     G_ = []  # add prelink pL_,pN_? include merged Cs, in feature space for Cs
@@ -449,7 +452,7 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                     C = sum2C(N_, _C, _i=None, root=Ft)
                     for n,m,o in zip(N_,m_,o_): n.rN_ += [C]; n.m_+=[m]; n.o_+=[o]
                     C._N_ = list(set(N__)-set(N_))  # frontier
-                    for n in C._N_+C.N_: n._C_ += [C]; n._m_+=[m]; n._o_+=[o]
+                    for n in C._N_: n.rN_ += [C]; n.m_+=[m]; n.o_+=[o]
                     C._L_ = set(L_)  # peer links
                     if D< Avd*O: oC_+= [C]  # output if stable, actually if val_(DTT, fi=0) + D?
                     else:        C_ += [C]  # reform
@@ -462,8 +465,8 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                 Dm+=dm; Do+=do
             else: break  # the rest is weaker
         for n in Ft.N_:
-            n._C_ += n.rN_; n._m_+= n.m_; n._o_+= n.o_; n.rN_,n.m_,n.o_ = [],[],[]  # new n.Ct.N_s, combine with v_ in Ct_?
-        if mat * dif * olp > ave*centw*2:
+            n._C_ = n.rN_; n._m_= n.m_; n._o_= n.o_; n.rN_,n.m_,n.o_ = [],[],[]  # new n.Ct.N_s, combine with v_ in Ct_?
+        if oC_ and mat * dif * olp > ave*centw*2:  # mat is incremented regardless of oC, so oC shouldn't be empty if true, include size of oC_ in the eval?
             oC_ = cluster_P(oC_, Ft.N_, Ft)  # refine all memberships in parallel by global backprop|EM
             break
         if Dm/Do > Ave: _C_=C_  # dval vs. dolp: overlap increases with Cs expansion
@@ -492,7 +495,7 @@ def cluster_P(_C_,N_,root):  # Parallel centroid refining, _C_ from cluster_C, N
         Ave = ave * (root.r+centw)
         if M > Ave*O and dM > Ave*dO:  # strong update
             _C_ = C_
-            for N in N_: N._m_,N._o_,N._d_,N._r_ = N.m_,N.o_,N.d_,N.r
+            for N in N_: N._m_,N._o_,N._d_,N._r_ = N.m_,N.o_,N.d_,N.r_  # should be r_ here
         else: break
     out_ = []
     for i, C in enumerate(C_):
@@ -536,7 +539,7 @@ def sum2G(ft_, root=None, init=1, typ=None):
     for ft, nF in zip_longest(ft_,('Nt','Lt','Bt')):
         if ft: n_,_,tt,c,r = ft; Ft_+= [CF(N_=n_,nF=nF,dTT=tt,m=(vt:=vt_(tt,r))[0],d=vt[1],c=c,r=r)]
         else:  Ft_ += [CF()]
-    G = comb_Ft(*Ft_,CF(), root,1)  # Ct=[]
+    G = comb_Ft(*Ft_,CF(), root)  # Ct=[]
     N_= G.N_; N=N_[0]; G.sub = N.sub+1 if G.L_ else N.sub
     if typ is None: typ = N.typ
     G.typ=typ; r=G.r
@@ -577,7 +580,7 @@ def sum_vt(N_, root=None, rr=0,rm=0,rd=0, merge=0, f2=0):  # weighted sum of CN|
     C = sum(n.c for n in N_); R = 0; TT = np.zeros((2,9))
     for n in N_:
         rc = n.c/C; TT += n.dTT*rc; R += n.r*rc  # * weight
-    R = (R+rr)/len(N_)
+    R = (R+rr)/len(N_)  # not sure but when R is already applied with rc (*n.c/C), do we still need divide by N_ here?
     m,d = vt_(TT,R); m-=rm; d-=rd  # deviations from tentative m,d
     if root is not None:
         root.dTT=TT; root.r=R; root.c=C; root.m=m; root.d=d  # * brrw/Bt, rdn/Ct?
@@ -588,7 +591,7 @@ def sum_vt(N_, root=None, rr=0,rm=0,rd=0, merge=0, f2=0):  # weighted sum of CN|
 
 def add_Nt(G, Nt, merge=0):  # addition to sum_vt or init
 
-    if G.Nt.H and Nt.H:  # also Ct.H if separate?
+    if G.Nt.H and hasattr(Nt, 'H') and Nt.H:  # also Ct.H if separate?
         for Lev,lev in zip_longest(G.Nt.H, Nt.H):  # bottom-up
             if lev:
                 if Lev: sum_vt([Lev,lev], Lev,merge=1,f2=1)
@@ -630,7 +633,7 @@ def sum2F(N_, nF, root, TT=np.zeros((2,9)), C=0, R=0, fset=1, fCF=1):  # -> CF/C
                 if lev:
                     if Lev is not None: Lev += lev.N_
                     else: H += [list(lev.N_)]
-        Ft.H = [sum2F(lev, nF, Ft,fset=0) for lev in H] if H else []
+        Ft.H = [sum2F(lev, nF, root,fset=0) for lev in H] if H else []  # i think H's root should be root instead of Ft? Else the alternation between CN->CF->CN between root becomes not valid here
     if C: m,d = vt_(TT,R)
     else: m,d,TT,C,R = sum_vt(N_)
     Ft = (CN,CF)[fCF](nF=nF, dTT=TT,m=m,d=d,c=C,r=R, root=root)  # root Bt|Ct ->CN
@@ -784,8 +787,9 @@ def proj_N(N, dist, A, r, dec=1):  # arg rc += N.rc+connw, recursively specify N
     cos_d = (N.angl[0].dot(A) / (np.hypot(*N.angl[0]) * dist + eps)) * N.angl[1]  # internal x external angle alignment
     iTT, eTT = np.zeros((2,9)), np.zeros((2,9))
     wTT = TTw(N)
-    for L in N.L_+N.B_: proj_TT(L, cos_d, dist, L.r+r, iTT, wTT, dec)  # accum TT internally
-    for L in N.rim:  proj_TT(L, cos_d, dist, L.r+r, eTT, wTT, dec)
+    # from B fork, their L is dFt, need a different workflow? or skip them?
+    for L in N.L_+N.B_: proj_TT(L, cos_d, dist, L.r+r, iTT, wTT, dec=dec)  # accum TT internally  (we need argument dec, else it becomes fdec)
+    for L in N.rim:  proj_TT(L, cos_d, dist, L.r+r, eTT, wTT, dec=dec)
     pTT = iTT + eTT  # projected int,ext links, work the same?
 
     return pTT  # val_(N.dTT,rc) * (1- val_(iTT+eTT, rc))  # info_gain = N.m * average link uncertainty, should be separate
