@@ -146,11 +146,11 @@ def cross_comp(Ft, ir, nF='Nt'):  # core function mediating recursive rng+ and d
     L_,TT,c,r,TTd,cd,rd = comp_N_(combinations(N_,2),ir) if N_[0].typ<3 else comp_C_(N_,ir,fC=1)
     if L_:  # Lm_, no +|- Ft.Lt?
         if val_(TT, r+connw, TTw(Ft), (len(L_)-1)*Lw,1,TTd,r) > 0:
-            E_ = get_exemplars({N for L in L_ for N in L.nt}, r)
+            E_ = get_exemplars({N for L in L_ for N in L.nt}, r)  # the returned r and rd above are ratio (r/c), so it's actually wrong to use them as r in get_exemplar, cluster_N and etc? We only need this r ratio in the val_?
             G_,r = cluster_N(Ft, E_,r)  # -> cluster_C, _P
             if G_:
                 Ft = sum2F(G_, nF, Ft.root)
-                if val_(Ft.dTT, r+nw, TTw(Ft), (len(N_)-1)*Lw,1, TTd,r) > 0:
+                if val_(Ft.dTT, r+nw, TTw(Ft), (len(Ft.N_)-1)*Lw,1, TTd,r) > 0:  # should be using Ft.N_ or G_ here?
                     G_,r = cross_comp(Ft,r,nF)  # agg+, trans-comp
     return G_, r  # G_ is recursion flag?
 
@@ -165,7 +165,7 @@ def comp_N_(_pairs, r, tnF=None, rL=None):  # incremental-distance cross_comp, m
         else:
             dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
             pairs += [[dist, dy_dx,_N,N]]
-    if not pairs: return 0,0,0,r,0,0,0
+    if not pairs: return [],np.zeros((2,9)),0,r,0,0,0  # preserve type for comp_F: L_,TT,C,R,_,_,_= comp_N_(Np_,r,nF,rL)
 
     def proj_V(_N,N, dist, dy_dx, dec):  # _N x N induction
         Dec = dec or decay ** ((dist/((_N.span+N.span)/2)))
@@ -187,7 +187,7 @@ def comp_N_(_pairs, r, tnF=None, rL=None):  # incremental-distance cross_comp, m
                 Link = comp_N(_N,N, lr, full=not tnF, A=dy_dx, span=dist, rL=rL, L_=L_, N_=N_, acc=acc)
                 dpTT += pTT-Link.dTT  # prediction error to fit the code, not implemented
             else:
-                pL = CN(typ=-1, nt=[_N,N], dTT=pTT,m=m,d=d,c=min(N.c,_N.c),r=lr, angl=np.array([dy_dx,1],dtype=object),span=dist)
+                pL = CN(typ=-1, nt=[_N,N], dTT=pTT,m=m,d=d,c=min(N.c,_N.c),r=lr, angl=np.array([dy_dx,1],dtype=object),span=dist,yx=(N.yx+N.yx)/2)  # added yx to compute span in B fork
                 L_+= [pL]; N.rim+=[pL]; _N.rim += [pL]; N_+=pL.nt; acc[0]+=pTT*pL.c; acc[1]+=pL.c; acc[2]+=pL.r*pL.c  # all +ve
                 # ~= links in clustering
         else: break  # beyond initial induction range, re-sort by proj_V?
@@ -245,10 +245,10 @@ def comp_N(_N,N, r, full=1, A=np.zeros(2),span=None, rL=None, L_=None, N_=None, 
     TT= base_comp(_N,N)[0] if full else comp_derT(_N.dTT[1],N.dTT[1]); m,d = vt_(TT,r)
     L = CN(typ=1, nt=[_N,N], dTT=TT, m=m, d=d, c=min(N.c,_N.c), r=r, root=rL, exe=1)
     if N.typ > 0 and m > ave*nw:
-        dH,htt,C,R = comp_H(_N.Nt, N.Nt, L); r=R  # tentative subcomp
+        dH,htt,C,R = comp_H(_N.Nt, N.Nt, L); r=R  # tentative subcomp (this r replaces input r?)
         if m + vt_(htt,R/C)[0] > ave*nw:  # subcomp -> tFs in L:
             if abs(N.typ) ==1:
-                for n,_n in product(_N.nt,N.nt): L.Nt.fb_ += [comp_N(n,_n,r)]  # link sub-comp
+                for _n,n in product(_N.nt,N.nt): L.Nt.fb_ += [comp_N(_n,n,r)]  # link sub-comp  (the _n and n sequence should be [_n, n] here?)
             else:
                 for i,(_Ft,Ft,tnF) in enumerate(zip((_N.Nt,_N.Lt,_N.Bt,_N.Ct),(N.Nt,N.Lt,N.Bt,N.Ct),('Nt','Lt','Bt','Ct'))):
                     if _Ft and Ft:  # sub-comp
@@ -406,7 +406,7 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
                     G_ += [sum2G(ft_,Ft)]; TT+=tt; C+=c  # tt*r? sub+/sum2G
         if G_:
             for G in G_: trans_cluster(G)  # splice trans_links, merge L.nt.roots
-            if val_(TT, r+1, TTw(Ft), (len(G_)-1)*Lw):
+            if val_(TT, r+1, TTw(Ft), (len(G_)-1)*Lw) > 0:  # we need > 0 here because negative value may return true as well
                 sum2F(G_,Ft.nF, Ft.root,TT,C); r+=1  # sub+, sum Rc? Ft.Lt is empty till cross_comp
     return G_, r
 
@@ -443,8 +443,8 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                         if _C not in n._C_: dm+=m; do+=odm  # not in extended _N__
                     else:
                         if _C in n._C_: i = n._C_.index(_C); dm+=n._m_[i]; do+=n._o_[i]
-                DTT+=dTT; mat+=M; dif+=D; olp+=O; cnt+=cc
                 if M > Ave*O and val_(dTT, cr+O, TTw(_C),(len(N_)-1)*Lw) > 0:  # dTT is more precise?
+                    DTT+=dTT; mat+=M; dif+=D; olp+=O; cnt+=cc  # this should be here, else `mat * dif * olp > ave*centw` eval may true while we get empty C_ or oC_
                     C = sum2C(N_, _C, _i=None, root=Ft)
                     for n,m,o in zip(N_,m_,o_): n.rN_ += [C]; n.m_+=[m]; n.o_+=[o]
                     C._N_ = list(set(N__)-set(N_))  # frontier
@@ -528,13 +528,12 @@ def sum2G(ft_, root=None, init=1, typ=None):
 
     if not init:
         N_,_,ntt,nc,nr = ft_[0]; N_+=root.N_; ntt+=root.Nt.dTT; nc+=root.Nt.c; nr+=root.Nt.r; ft_[0] = N_,_,ntt,nc,nr
-        if len(ft_)>1:
-            if len(ft_)>1: L_,_,ltt,lc,lr=ft_[1]; L_+=root.L_; ltt+=root.Lt.dTT; lc+=root.Lt.c; lr+=root.Lt.r; ft_[1]=L_,_,ltt,lc,lr
+        if len(ft_)>1: L_,_,ltt,lc,lr=ft_[1]; L_+=root.L_; ltt+=root.Lt.dTT; lc+=root.Lt.c; lr+=root.Lt.r; ft_[1]=L_,_,ltt,lc,lr  # remove redundant eval
     Ft_ = []
     for ft, nF in zip_longest(ft_,('Nt','Lt','Bt')):
         if ft: n_,_,tt,c,r = ft; Ft_+= [CF(N_=n_,nF=nF,dTT=tt,m=(vt:=vt_(tt,r))[0],d=vt[1],c=c,r=r)]
         else:  Ft_ += [CF()]
-    G = comb_Ft(*Ft_,CF(), root,1)  # Ct=[]
+    G = comb_Ft(*Ft_,CF(), root)  # Ct=[]
     N_= G.N_; N=N_[0]; G.sub = N.sub+1 if G.L_ else N.sub
     if typ is None: typ = N.typ
     G.typ=typ; r=G.r
