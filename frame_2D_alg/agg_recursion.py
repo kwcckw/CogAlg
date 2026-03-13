@@ -125,12 +125,12 @@ def val_(TT, r, wTT, mw=1.0,fi=1, _TT=None, cr=.5):  # m,d eval per cluster, cr 
         rv  = rv * (1-cr) + _rv * cr  # + borrowed alt fork val, cr: d count ratio, must be passed with _TT?
     return rv*mw - (ave if fi else avd) * r
 
-def sum_vt(N_, root=None, rr=0,rm=0,rd=0, merge=0, f2=0):  # weighted sum of CN|CF list
+def sum_vt(N_, root=None, rr=None,rm=0,rd=0, merge=0, f2=0):  # weighted sum of CN|CF list
 
     C = sum(n.c for n in N_); R = 0; TT = np.zeros((2,9))
     for n in N_:
         rc = n.c/C; TT += n.dTT*rc; R += n.r*rc  # * weight
-    R = (R + rr) / 2  # rr * rC?
+    if rr is not None: R = (R + rr) / 2  # rr * rC?  (this should be applicable only if we parse in rr value?)
     m,d = vt_(TT, R); m-=rm; d-=rd  # deviations from tentative m,d
     if root is not None:
         root.dTT=TT; root.r=R; root.c=C; root.m=m; root.d=d  # * brrw/Bt, rdn/Ct?
@@ -157,11 +157,14 @@ def cross_comp(Ft, ir, nF='Nt'):  # core function mediating recursive rng+ and d
 
     N_,G_ = Ft.N_,[]  # rc=rdn+olp, comp N_|B_|C_:
     L_,TT,c,r,TTd,cd,rd = comp_N_(combinations(N_,2),ir) if N_[0].typ<3 else comp_C_(N_,ir,fC=1)
+    m_comp, d_comp = vt_(TT, r) if c else (0,0)  # not sure
     if L_:  # Lm_, no +|- Ft.Lt?
         if val_(TT, r+connw, TTw(Ft), (len(L_)-1)*Lw,1,TTd, rd/(r+rd)) > 0:
             E_ = get_exemplars({N for L in L_ for N in L.nt}, r)
             G_,r = cluster_N(Ft, E_,r)  # -> cluster_C, _P
             if G_:
+                m_clust = sum([G.m for G in G_])
+                d_clust = sum([G.Bt.d for G in G_ if G.Bt and G.Bt.d > avd * r])  # not sure
                 Ft = sum2F(G_, nF, Ft.root)
                 if val_(TT,r+nw, TTw(Ft),(len(G_)-1)*Lw,1, TTd, rd/(r+rd)) > 0:
                     G_,r = cross_comp(Ft,r,nF)  # agg+, trans-comp
@@ -295,7 +298,7 @@ def comp_F(_F, F, ir=0, rL=None):
             else: Np_ = list(product(_N_,N_))  # pairs
             if (rL.m+m)/2 * ((len(Np_)-1)*Lw) > ave * nw:
                 if f: L_= [comp_F(*Np, r,rL=dF) for Np in Np_]; _,_,TT,C,R = sum_vt(L_)
-                else: L_,TT,C,R,_,_,_= comp_N_(Np_,r,nF,rL)
+                else: L_,TT,C,R,_,_,_= comp_N_(Np_,r,nF,rL)  # after this comp with add rim, apply `sum_vt(N.rim,getattr(N,'Rt'))` again on all nodes?
                 if L_:
                     dF.N_ = L_
                     dF.m,dF.d,dF.dTT,dF.c,dF.r = sum_vt([dF,CF(dTT=TT,c=C,r=R)])
@@ -384,7 +387,10 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
             for tFt in L.Nt,L.Bt,L.Ct:  # Lt doesn't form trans-links
                 for tL in tFt.N_:
                     if tL.m > ave*connw:  # merge trans_link.nt.roots
+                        # looks like assigning Ft as root in sum2F causing rt to be a CF instead of their actual G root here
                         rt0 = getattr(tL.nt[0].root,'root',None); rt1 = getattr(tL.nt[1].root,'root',None)  # CNs
+                        if isinstance(rt0, CF): rt0 = getattr(rt0,'root',None)
+                        if isinstance(rt1, CF): rt1 = getattr(rt1,'root',None)
                         if rt0 and rt1 and rt0 !=rt1: add_Nt(rt0, rt1, merge=1)  # concat in higher G
             L.Nt,L.Bt,L.Ct = CF(),CF(),CF()
             # only to merge roots
@@ -399,8 +405,9 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
             while __L_:
                 _L_ = []
                 for L in __L_:  # flood-fill via frontier links
+                    if L in in_: continue  # skip if L is already present in in_? Since both N and _N's fin must be true
                     _N = L.nt[0] if L.nt[1].fin else L.nt[1]; in_.add(L)
-                    if not _N.fin and _N in Ft.N_:
+                    if _N in Ft.N_:
                         m,d = nt_vt(*L.nt)
                         if m > ave * (r-1):  # cluster nt, L,C_ by combined rim density:
                             N_ += [_N]; _N.fin = 1
@@ -564,7 +571,7 @@ def sum2G(ft_, root=None, init=1, typ=None):
                     cross_comp(G.Nt,r,'Nt')
     if G.Bt:
         Bt = G.Bt; bd,br = Bt.d,Bt.r
-        if bd > avd*br*nw and typ!=1: cross_comp(Bt, br,'Bt')  # no ddfork
+        if bd > avd*br*nw and typ!=1: cross_comp(Bt, br,'Bt')  # no ddfork  (we actually never call sum2G with typ =1?)
         Bt.brrw = Bt.m* (root.root.m* (decay * (root.root.span/G.span)))
     G.rN_ = sorted(G.rN_, key=lambda x: (x.m/x.c), reverse=True)
     return G
