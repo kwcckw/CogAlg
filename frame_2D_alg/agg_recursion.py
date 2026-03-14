@@ -221,9 +221,9 @@ def comp_C_(C_, rr,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s
                 if val_(L.dTT, rr+nw, wTTf,fi=0) < 0:
                     C0,C1 = L.nt
                     if C0 is C1 or C1 in exc_: continue  # not merged
-                    sum_vT([C0,C1], C0, fNt=1)
+                    sum_vT([C0,C1], C0, merge=2, fNt=1, froot=1)
                     for l in C1.rim: l.nt = [C0 if n is C1 else n for n in l.nt]
-                    N_.remove(C1); exc_+=[C1]
+                    if C1 in N_: N_.remove(C1); exc_+=[C1]  # C1 maybe in multiple Ls and we only need to remove it once? Or remove it in batches with exc_?
                 else: L_ = L_[i:]; break
     else:
         # adjacent | distance-constrained cross_comp along eigenvector: sort by max attr, or original yx in sub+, proj C.L_?
@@ -294,7 +294,7 @@ def comp_F(_F, F, ir=0, rL=None):
                 else: L_,TT,C,R,_,_,_= comp_N_(Np_,r,nF,rL)
                 if L_:
                     sum_vT([dF,CF(dTT=TT,c=C,r=R)], root=dF)
-                    sum_vT([rL,dF], root=rL)
+                    sum_vT([rL,dF], root=rL,merge=0)  # merge should be 0 here
     return dF  # no cross-fork N_, no L ext updates?
 
 def base_comp(_N,N):  # comp Et, kern, extT, dTT
@@ -408,7 +408,7 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
             if N_:
                 ft_ = []
                 for i,(F_,nF) in enumerate(zip((N_,L_,B_),('Nt','Lt','Bt'))):  # no Ct till sub+?
-                    F_ = list(set(F_)) or []; tt,fc,fr = sum_vt(F_) if F_ else (0,0,np.zeros((2,9)),0,0)
+                    F_ = list(set(F_)) or []; tt,fc,fr = sum_vt(F_) if F_ else (np.zeros((2,9)),0,0)
                     ft_+= [[F_,nF,tt,fc,fr]]
                 (_,_,nt,nc,_),(_,_,lt,lc,_),(_,_,bt,bc,br) = ft_
                 c = nc + lc + bc*br  # redundant B_,C_
@@ -572,12 +572,12 @@ def comb_Ft(Nt, Lt, Bt, Ct, root):  # from sum2G, default Nt
     G = CN(Nt=Nt,Lt=Lt,Bt=Bt,Ct=Ct, root=root); Nt.root=G; Lt.root=G; Bt.root=G; Ct.root=G
     T = CopyF(Nt)  # temporary accumulator
     dF_ = []
-    for Ft in Nt,Lt,Bt:
+    for Ft in Ct,Lt,Bt:  # should be Ct here? Else we are using comp_F between the same Nt?
         if Ft: dF_ += [comp_F(T,Ft, root.r,G)]; T.dTT,T.c,T.r = sum_vt([T,Ft])  # *brrw /G update, *rdn /G update?
         else:  dF_ += [CF()]
-    sum_vT([G,T], root=G)
+    sum_vT([G,T], root=G, merge=0)  # merge should be 0 here
     if any(dF_):  #-> Xt.N_: cross-fork covariance
-        sum_vT(dF_, root=G.Xt); sum_vT([G,G.Xt],root=G)
+        sum_vT(dF_, root=G.Xt); sum_vT([G,G.Xt],root=G,merge=0)  # merge should be 0 here
     add_Nt(G, Nt)  # add H,kern,ext, doesn't affect comp_F
     if Lt: add_Lt(G, Lt)
     return G
@@ -587,6 +587,7 @@ def sum_vT(N_, root, merge=1, fNt=0, fLt=0, froot=1):
     tt,c,r = sum_vt(N_); m,d = (vt_(tt,r))
     root.dTT=tt; root.m=m; root.d=d; root.c=c; root.r=r
     if merge:
+        N_ = N_[1].N_ if merge == 2 else N_  # merge==2 is the prior f2
         root.N_ +=N_
         for N in N_:
             if froot: N.root=root
@@ -598,7 +599,7 @@ def add_Nt(G, Nt, merge=0):  # addition to sum_vt or init
     if isinstance(Nt,CF) and G.Nt.H and Nt.H:  # also Ct.H if separate?
         for Lev,lev in zip_longest(G.Nt.H, Nt.H):  # bottom-up
             if lev:
-                if Lev: sum_vT([Lev,lev], root=Lev, froot=0)
+                if Lev: sum_vT([Lev,lev], root=Lev, merge=2)  # froot should be 1 here to merge? lev's Ns should be merge to Lev now
                 else: G.Nt.H.append(CopyF(lev, G))
     N_ = Nt.N_
     if merge: G.N_+= N_ if merge<2 else [Nt]  # never 2? also merge L_?
@@ -618,10 +619,12 @@ def add_Lt(G, Lt):  # addition to sum_vt
     L_ = Lt.N_
     if Lt.m > ave*specw:  # comp typ -1 pre-links
         L_,pL_ =[],[]; [L_.append(L) if L.typ==1 else pL_.append(L) for L in Lt.N_]
-        if pL_ and sum_vt(pL_)[0] > ave*specw:
-            for L in pL_:
-                link = comp_N(*L.nt, G.r,1, L.angl[0], L.span); Lt.dTT+= link.dTT-L.dTT; L_+=[link]  # ,rr=G.r
-            Lt.m, Lt.d = vt_(Lt.dTT, G.r)  # + update G?
+        if pL_:
+            tt,_,r = sum_vt(pL_)  
+            if vt_(tt, r)[0] > ave*specw:  # something like this? sum_vt returns only TT
+                for L in pL_:
+                    link = comp_N(*L.nt, G.r,1, L.angl[0], L.span); Lt.dTT+= link.dTT-L.dTT; L_+=[link]  # ,rr=G.r
+                Lt.m, Lt.d = vt_(Lt.dTT, G.r)  # + update G?
     A = np.sum([l.angl[0] for l in L_], axis=0) if L_ else np.zeros(2)
     G.angl = np.array([A, np.sign(G.dTT[1] @ wTTf[1])], dtype=object)  # add weighting?
     G.mang = np.mean([comp_A(G.angl[0], l.angl[0])[0] for l in G.L_])  # Ls only?
@@ -640,7 +643,7 @@ def sum2F(N_, nF, root, TT=np.zeros((2,9)), C=0, R=0, fset=1, fCF=1):  # -> CF/C
         Ft.H = [sum2F(lev,'lev',Ft,fset=0) for lev in H] if H else []
     if C: m,d = vt_(TT,R)
     else: TT,C,R = sum_vt(N_); m,d = vt_(TT,R)
-    Ft = (CN,CF)[fCF](nF=nF, N_=N_, dTT=TT,m=m,d=d,c=C,r=R, root=root)  # root Bt|Ct ->CN
+    Ft = (CN,CF)[fCF](nF=nF, dTT=TT,m=m,d=d,c=C,r=R, root=root); setattr(Ft, 'N_',N_)   # root Bt|Ct ->CN (CN doesn't support N_ assignment)
     n__ = [n.N_ for n in N_]
     if any(n__):
         sum_H(N_,Ft)  # sum lower levels, if any
