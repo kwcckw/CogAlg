@@ -139,7 +139,7 @@ def Q2R(N_, root, merge=1, froot=1):  # update root with N_, maybe unpacked?
 
     root.m, root.d, root.dTT, root.c, root.r = sum_vt(N_,fm=1)
     if merge:
-        N_ = N_[1].N_ if merge==2 else N_  # 2: pair merge
+        N_ = ([n for N in N_ for n in N.N_]) if merge==3 else (N_[1].N_ if merge == 2 else N_)  # 2: pair merge
         root.N_ += N_
         if froot:
             for N in N_: N.root=root
@@ -163,14 +163,14 @@ def cross_comp(Ft, rr, nF='Nt'):  # core function mediating recursive rng+ and d
     N_,G_ = Ft.N_,[]; fC = N_[0].typ==3  # rc=rdn+olp, comp N_|B_|C_:
     L_, TT,c,r,TTd,cd,rd = comp_C_(N_,rr,fC=1) if fC else comp_N_(combinations(N_,2),rr)  # should be comp_C_ when fC
     if L_:  # Lm_, no +|- Ft.Lt?
-        M, D = vt_(TT, r, TTw(Ft.root,fC))
+        M, D = vt_(TT, r, TTw(Ft.root,fC))  # this TT is from comp, should be using wTTn|wTTc?
         if M * ((len(L_)-1)*Lw) > ave * Nw:  # global cw,nw,Nw,Cw / ffeedback
             setattr( Ft.root,('TTn','TTc')[fC], TT+TTd)  # comp->TT, clust->dTT, clust compression = TT-dTT
             E_ = get_exemplars({N for L in L_ for N in L.nt}, r)
             G_,r = cluster_N(Ft, E_, r)  # -> cluster_C, _P
             if G_:
                 Ft = sum2F(G_, nF, Ft.root)
-                if val_(TT,r+nw, TTw(Ft,0),(len(G_)-1)*Lw,1, TTd, rd/(r+rd)) > 0:
+                if val_(TT,r+nw, TTw(Ft.root,0),(len(G_)-1)*Lw,1, TTd, rd/(r+rd)) > 0:
                     G_,r = cross_comp(Ft,r,nF)  # agg+, trans-comp
     return G_, r  # G_ is recursion flag
 
@@ -431,7 +431,7 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
             for G in G_: trans_cluster(G)  # splice trans_links, merge L.nt.roots
             if val_(TT, r+1, TTw(Ft.root), (len(G_)-1)*Lw) > 0:
                 sum2F(G_,Ft.nF, Ft.root,TT,C); r+=1  # sub+, sum Rc? Ft.Lt is empty till cross_comp
-            Q2R([G.Ct for G in G_ if G.Ct], root=Ft.root.Ct, froot=0)
+            Q2R([G.Ct for G in G_ if G.Ct], root=Ft.root.Ct, merge=3, froot=0)
     return G_, r
 
 def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via rims of new member nodes, within root
@@ -439,9 +439,9 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
     C_,_C_ = [],[]  # form root.Ct, may call cross_comp-> cluster_N, incr rc
     for n in Ft.N_: n._C_,n.m_,n._m_,n.o_,n._o_,n.rN_ = [],[],[],[],[],[]
     for E in E_:
-        C = Copy_(E,Ft,init=2,typ=0); C.wTT_ = [np.zeros((2,9)) for _ in range(4)]  # all rims in root, sequence along eigenvector?
-        for i,TT in enumerate([C.TTn,C.TTc,C.dTT,C.Ct.dTT]):
-            if C.wTT_[i] is None: C.wTT_[i] = wTT_[i]  # make a default?
+        C = Copy_(E,Ft,init=2,typ=0)  # all rims in root, sequence along eigenvector?
+        for i,TT in enumerate([C.dTT,C.Ct.dTT,C.TTn,C.TTc]):  # the order is wrong here? dTT should be wTTN and so on
+            if C.wTT_[i] is None: C.wTT_[i] = wTT_[i].copy()  # make a default?  (Sorry, we should copy to prevent the same global wTT_ reference)
             cent_TT(TT,C.wTT_[i],r)  # no rTT
         C._N_ = list({n for l in E.rim for n in l.nt if (n is not E and n in Ft.N_)})
         C._L_ = set(E.rim)  # init peer links
@@ -548,9 +548,8 @@ def sum2C(N_, _C, _i=None, root=None):  # fuzzy sum + base attrs for centroids
         rc = c/ Cc; TT += N.dTT*rc; kern += N.kern*rc; span += N.span*rc; yx += N.yx*rc; R += N.r*rc
     m,d = vt_(TT,R, TTw(root,1))  # wTTC
     C = CN(typ=3, Nt=CF(N_=N_), dTT=TT, m=m, d=d, c=Cc, r=R, yx=yx, kern=kern, span=span, root=root)
-    C.wTT_ = [np.zeros((2,9)) for _ in range(4)]
-    for i,TT in enumerate([C.TTn, C.TTc, C.dTT, C.Ct.dTT]):
-        if not np.any(C.wTT_[i]): C.wTT_[i] = wTT_[i]  # init
+    for i,TT in enumerate([C.dTT, C.Ct.dTT, C.TTn, C.TTc]):  # the order is wrong here?
+        if not np.any(C.wTT_[i]): C.wTT_[i] = wTT_[i].copy()  # init
         cent_TT(TT, C.wTT_[i],R)
     return C
 
@@ -666,9 +665,9 @@ def cent_TT(dTT, _wTT, r):  # weight attr matches | diffs by their match to the 
             mean = max(rvT.mean(), eps)  # scalar
             invdev_ = np.minimum(rvT / mean, mean / np.maximum(rvT, eps))
             wT = invdev_ / max(invdev_.mean(), eps)   # mean(wT)=1
-            _wT = wT
             if np.sum(np.abs(wT -_wT)) < ave * r:  # if np.linalg.norm(wT - _wT, 1) < r?
                 break
+            _wT = wT  # we need wT - _wT above, so this update should be later    
         wTT += [_wT]
     _wTT[:] = np.array(wTT)
     # single-mode dTT, extend to 2D-3D lev cycles in H, cross-level param max / centroid?
@@ -791,8 +790,8 @@ def proj_N(N, dist, A, r, dec=1):  # arg rc += N.rc+Nw, recursively specify N pr
     cos_d = (N.angl[0].dot(A) / (np.hypot(*N.angl[0]) * dist + eps)) * N.angl[1]  # internal x external angle alignment
     iTT, eTT = np.zeros((2,9)), np.zeros((2,9))
     wTT = TTw(N,0)
-    for L in N.L_+N.B_: proj_TT(L, cos_d, dist, L.r+r, iTT, wTT, dec)  # accum TT internally
-    for L in N.rim:  proj_TT(L, cos_d, dist, L.r+r, eTT, wTT, dec)
+    for L in N.L_+N.B_: proj_TT(L, cos_d, dist, L.r+r, iTT, wTT, dec=dec)  # accum TT internally  (else dec becomes fdec)
+    for L in N.rim:  proj_TT(L, cos_d, dist, L.r+r, eTT, wTT, dec=dec)
     pTT = iTT + eTT  # projected int,ext links, work the same?
 
     return pTT  # val_(N.dTT,rc) * (1- val_(iTT+eTT, rc))  # info_gain = N.m * average link uncertainty, should be separate
@@ -934,7 +933,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4):  # all initial args set m
                         iy = _iy + (y-cy) * Ly**elev; ix = _ix + (x-cx) * Lx**elev  # feedback to shifted coords
                         if elev:
                             subF = frame_H(image, iy, ix, Ly, Lx, Y,X, rV, elev)  # up to current level
-                            _T = subF.N_[-1] if subF else []
+                            _T = subF if subF else []  # if lower level frame is higher level tile, _T should be subF instead?
                     else: break
                 else: break
             else: break
@@ -948,9 +947,11 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4):  # all initial args set m
     elev = 0; F, tile = [],[]  # frame, seed lower tile, if any
     while elev < max_elev:
         tile_ = expand_lev(iY,iX, elev, tile)
-        if tile_ and len(tile)>1:  # sparse higher-scope tile, if expanded
-            F = CN(box=np.array([0,0,Y,X]), yx=np.array([Y//2, X//2])); F.N_ = tile_; F.H = []   # same center on all levels
-            if cross_comp(F, rr=elev)[0]:  # spec->tN_,tC_,tL_, proj comb N_'L_?
+        if tile_:  # sparse higher-scope tile, if expanded
+            F = CN(box=np.array([0,0,Y,X]), yx=np.array([Y//2, X//2])); 
+            F.H = ([tile] + tile.H) if tile else [] # looks like we missed out the H?
+            F.N_ = tile_  # same center on all levels
+            if cross_comp(F.Nt, rr=elev)[0]:  # spec->tN_,tC_,tL_, proj comb N_'L_?  (F.Nt to cross_comp)
                 elev += 1
                 for tile in tile_: F.TTn += tile.TTn; F.TTc += tile.TTc; F.dTT += tile.dTT; F.Ct.dTT += tile.Ct.dTT
                 if max_elev == 4:  # seed, not from expand_lev
