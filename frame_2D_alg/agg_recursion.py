@@ -135,9 +135,9 @@ def sum_vt(N_, fm=0, wTT=wTTn):  # basic weighted sum of CN|CF list, wTTn for co
         rc = n.c / C; TT += n.dTT*rc; R += n.r*rc  # * weight
     return (*vt_(TT,R,wTT), TT,C,R) if fm else (TT,C,R)
 
-def Q2R(N_, R=[], merge=1, froot=1):  # update root with N_, maybe unpacked?
+def Q2R(N_, R=None, merge=1, froot=1):  # update root with N_, maybe unpacked?
 
-    if not R: R = CF()  # root, CN is always passed?
+    if R is None: R = CF()  # root, CN is always passed? (prevent init new R when empty R is parsed)
     R.m, R.d, R.dTT, R.c, R.r = sum_vt(N_,fm=1)
     if merge:
         N_ = [n for N in N_ for n in N.N_] if merge==3 else (N_[1].N_ if merge == 2 else N_)  # 2: pair merge
@@ -433,7 +433,7 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
             for G in G_: trans_cluster(G)  # splice trans_links, merge L.nt.roots
             if val_(TT, r+1, TTw(Ft.root), (len(G_)-1)*Lw) > 0:
                 sum2F(G_,Ft.nF, Ft.root,TT,C); r+=1  # sub+, Ft.Lt is empty till cross_comp
-        Q2R([C for N in (G_ if G_ else _N_) for C in N.Ct.N_], Ft.root.Ct, froot=0)
+        Q2R([C for N in (G_ if G_ else _N_) for C in N.Ct.N_], Ft.root.Ct, froot=0)  # _N_'s Ct is from prior layer, why we use it when G_ is empty?
     return G_, r
 
 def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via rims of new member nodes, within root
@@ -474,7 +474,7 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                         if _C in n._C_: i = n._C_.index(_C); dm+=n._m_[i]; do+=n._o_[i]
                 DTT+=dTT; mat+=M; dif+=D; olp+=O; cnt+=cc
                 if M > Ave*O and val_(dTT, cr+O, TTw(_C,1),(len(N_)-1)*Lw) > 0:  # dTT is more precise? (use wTTC here?)
-                    C = sum2C(N_, _C, _i=None, root=Ft)
+                    C = sum2C(N_, _C, _i=None, root=Ft.root)
                     for n,m,o in zip(N_,m_,o_):
                         n.rN_ += [C]; n.m_+=[m]; n.o_+=[o]
                     C._N_ = list(set(N__)-set(N_))  # new frontier
@@ -499,7 +499,7 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
     if oC_:
         for n in [N for C in oC_ for N in C.N_]:  # exemplar V + sum n match_dev to Cs, m* ||C rvals:
             n.exe = (n.d if n.typ==1 else n.m) + np.sum([m-ave*o for m, o in zip(n.m_, n.o_)]) - ave
-        if val_(DTT, r+olp, TTw(Ft,1), (len(oC_)-1)*Lw) > 0:
+        if val_(DTT, r+olp, TTw(Ft.root,1), (len(oC_)-1)*Lw) > 0:  # TTw should be used on Ft.root?
             Ct = sum2F(oC_,'Ct', Ft.root, fCF=0)
             _, r = cross_comp(Ct,r)  # all distant Cs, seq C_ in eigenvector = argmax(root.wTT)? Nt|Ct priority eval?
     return oC_, r
@@ -516,7 +516,7 @@ def cluster_P(_C_,N_,root):  # Parallel centroid refining, _C_ from cluster_C, N
             dM+= sum(abs(_m-m) for _m,m in zip(N._m_,N.m_))
             dO+= sum(abs(_o-o) for _o,o in zip(N._o_,N.o_))
             M += sum(N.m_); O += sum(N.o_)
-        C_ = [sum2C(N_,_C, i, root=root) for i, _C in enumerate(_C_)]  # update with new coefs, _C.m, N->C refs
+        C_ = [sum2C(N_,_C, i, root=root.root) for i, _C in enumerate(_C_)]  # update with new coefs, _C.m, N->C refs
         Ave = ave * (root.r+Cw)
         if M > Ave*O and dM > Ave*dO:  # strong update
             for N in N_: N._m_,N._o_,N._d_,N._r_ = N.m_,N.o_,N.d_,N.r_
@@ -946,7 +946,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4):  # all initial args set m
             TT,C,R = sum_vt(T_); R += elev
             if val_(TT, R/len(T_) + elev, wTT_[0], mw=(len(T_)-1)*Lw) > 0:
                 return T_
-    global ave,avd, Lw, intw, cw,nw, Cw,Nw, distw, mW, dW, wTTn, wTTc, wTTN, wTTC
+    global ave,avd, Lw, intw, cw,nw, Cw,Nw, distw, mW, dW, wTTn, wTTc, wTTN, wTTC, wTT_  # we need global wTT_ to reassign it
     ave,avd, Lw, intw, cw,nw, Cw,Nw, distw = np.array([ave,avd, Lw, intw, cw, nw, Cw, Nw, distw]) / rV
 
     elev = 0; F, tile = [],[]  # frame, seed lower tile, if any
@@ -955,18 +955,24 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4):  # all initial args set m
         if tile_:  # sparse higher-scope tile, if expanded
             F = CN(box=np.array([0,0,Y,X]), yx=np.array([Y//2, X//2]))  # same center on all levels
             F.H = []; F.N_ = tile_  # or Nt = Q2R(tile_)?
-            for T in tile_: add_H(F.H, T.H,F)
-            F.H += [Q2R([n for N in tile_ for n in N.N_])]  # concat prior top lev
+            [add_H(F.H, T.H,F) for T in tile_ if hasattr(T, 'H')]  # in the first elevation, no H will be added to tile in tile_ because no deeper frame_H will be called
+            # we need a CN level, because we need Ct, TTn, TTd
+            n_ = [n for N in tile_ for n in N.N_]
+            lev = CN(root=F); lev.N_ = n_
+            lev.m, lev.d, lev.dTT, lev.c, lev.r = sum_vt(n_,fm=1); lev.Ct = Q2R([n.Ct for n in n_ if n.Ct])
+            lev.TTn = np.sum([n.TTn for n in n_],axis=0); lev.TTc = np.sum([n.TTc for n in n_],axis=0)
+            F.H += [lev]  # concat prior top lev
             if cross_comp(F.Nt, rr=elev)[0]:  # spec->tN_,tC_,tL_, proj comb N_'L_?
                 elev += 1
                 if max_elev == 4:  # seed, not from expand_lev
                     rV, wTT_ = ffeedback(F)  # update globals, 4 rVs?
                     if rV > ave:
-                        for dTT, wTT in zip((F.TTn,F.TTc,F.dTT,F.Ct.dTT), wTT_):
+                        for dTT, wTT in zip((F.dTT,F.Ct.dTT,F.TTn,F.TTc), wTT_):  # the order here is wrong as well
                             cent_TT(dTT, wTT,2)  # set correlation weights
                             mW = np.sum(wTT[0]); dW = np.sum(wTT[1])
                             wTT[0]*= 9/(mW+eps); wTT[1]*= 9/(dW+eps)
                         F.wTT_ = wTT_
+                        wTTn, wTTc, wTTN, wTTC = wTT_  # reload each wTT with updated wTT_
                 tile = F  # comped tile_ is seed for next extension
             else: break
         else: break
