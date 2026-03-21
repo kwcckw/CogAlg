@@ -65,7 +65,8 @@ class CN(CBase):
         # 2= G:  + rim,kern,mang,sub,exe
         # 3= C | Cn: +rN_| m_,d_,r_,o_
         n.dTT, n.TTn, n.TTc = [np.copy(kwargs.get(x,np.zeros((2,9)))) for x in ('dTT','TTn','TTc')]  # +wTTC per Ct.dTT, all m_,d_ [M,D,n, I,G,a, L,S,A]
-        n.wTT_ = kwargs.get('wTT_',[None,None,None,None])  # dTT: Nt+Lt+Bt, TTC, TTn, TTc
+        # should be follow the same array size?
+        n.wTT_ = kwargs.get('wTT_',[np.ones((2,9)) for _ in range(4)])  # dTT: Nt+Lt+Bt, TTC, TTn, TTc
         n.m, n.d, n.c, n.r = [kwargs.get(x,0) for x in ('m','d','c','r')]  # combined forks, no direct accum?
         n.Nt,n.Bt,n.Ct,n.Lt,n.Xt,n.Rt = ((kwargs.get(f) if f in kwargs else CF(root=n) for f in ('Nt','Bt','Ct','Lt','Xt','Rt'))) # CN if nest, Ct||Nt
         n.kern = kwargs.get('kern',np.zeros(4))  # I,G,A: not ders, in links for simplicity, mostly redundant
@@ -147,7 +148,7 @@ def Q2R(N_, R=None, merge=1, froot=1, fN=0):  # update root with N_
     if fN and R.C_: R.Ct = Q2R(R.C_)
     return R
 
-def TTw(G, wi=0): return wTT_[wi] * G.wTT_[wi] if G.wTT_[wi] is not None else wTT_[wi]
+def TTw(G, wi=0): return wTT_[wi] * G.wTT_[wi]
 ''' 
   Agg cycle:
 - Cross-comp nodes, evaluate incremental-derivation cross-comp of new >ave difference links, recursively. 
@@ -173,7 +174,7 @@ def cross_comp(Ft, rr, nF='Nt'):  # core function mediating recursive rng+ and d
             G_,r = cluster_N(Ft, E_, r)  # -> cluster_C, _P
             if G_:
                 Ft = sum2F(G_, nF, Ft.root)
-                if val_(TT,r+nw, TTw(Ft.root,2),(len(G_)-1)*Lw,1, TTd, rd/(r+rd)) > 0:
+                if val_(TT,r+nw, TTw(Ft.root,fC),(len(G_)-1)*Lw,1, TTd, rd/(r+rd)) > 0:  # TTw with fC here?
                     G_,r = cross_comp(Ft,r,nF)  # agg+, trans-comp
     return G_, r  # G_ is recursion flag
 
@@ -215,7 +216,7 @@ def comp_N_(_pairs, r, tnF=None, rL=None):  # incremental-distance cross_comp, m
                 # ~= links in clustering
         else: break  # beyond initial induction range, re-sort by proj_V?
     for N in set(N_):
-        if N.rim: Q2R(N.rim, N.Rt)
+        if N.rim: Q2R(N.rim, N.Rt, merge=0, froot=0)  # we shouldn't merge anymore since Rt.N_ is already filled
     TT,cm,rm, TTd,cd,rd = acc
     return L_,TT,cm,rm/(cm or eps), TTd,cd,rd/(cd or eps)  # + dpTT for code-fitting backprop
 
@@ -252,7 +253,7 @@ def comp_C_(C_, rr,_C_=[], fall=1, fC=0):  # simplified for centroids, trans-N_s
             dy_dx = _C.yx-C.yx; dist = np.hypot(*dy_dx)
             comp_N(_C,C, rr,A=dy_dx,span=dist,L_=L_,N_=N_,acc=acc)  # simplified for typ=3
     for N in list(set(N_)):
-        if N.rim: Q2R(N.rim, N.Rt)
+        if N.rim: Q2R(N.rim, N.Rt, merge=0, froot=0)
     TTm,cm,rm,TTd,cd,rd = acc
     return L_,TTm,cm, rm/(cm or eps), TTd,cd, rd/(cd or eps)  # L_ is Lm now
 
@@ -402,7 +403,7 @@ def cluster_N(Ft, _N_, r):  # flood-fill node | link clusters, flat, replace iL_
     G_ =[]  # add prelink pL_,pN_? include merged Cs, in feature space for Cs
     if _N_ and val_(Ft.dTT, r+Nw, TTw(Ft.root), mw=(len(_N_)-1)*Lw) > 0:  #| fL?
         for N in _N_:
-            N.fin=0; N.exe=1; Q2R(N.rim, N.Rt)  # only if N was added in trans-cluster?
+            N.fin=0; N.exe=1; Q2R(N.rim, N.Rt, merge=0, froot=0)  # only if N was added in trans-cluster?
         G_= []; TT=np.zeros((2,9)); C=0; in_= set()  # root attrs
         for N in _N_:  # form G per remaining N
             if N.fin or (Ft.root.root and not N.exe): continue  # no exemplars in Fg
@@ -443,9 +444,7 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
     for n in Ft.N_: n._C_,n.m_,n._m_,n.o_,n._o_,n.rN_ = [],[],[],[],[],[]
     for E in E_:
         C = Copy_(E,Ft,init=2,typ=0)  # all rims in root, sequence along eigenvector?
-        for i, TT in enumerate([C.dTT, C.Ct.dTT, C.TTn, C.TTc]):
-            if C.wTT_[i] is None: C.wTT_[i] = wTT_[i].copy()
-            cent_TT(TT, C.wTT_[i],r)
+        for i, TT in enumerate([C.dTT, C.Ct.dTT, C.TTn, C.TTc]): cent_TT(TT, C.wTT_[i],r)
         C._N_ = list({n for l in E.rim for n in l.nt if (n is not E and n in Ft.N_)})
         C._L_ = set(E.rim)  # init peer links
         for n in C._N_+C.N_: n._m_+=[C.m*(n.c/C.c)]; n._o_+=[1]; n._C_+=[C]
@@ -474,7 +473,8 @@ def cluster_C(Ft, E_, r):  # form centroids by clustering exemplar surround via 
                     else:
                         if _C in n._C_: i = n._C_.index(_C); dm+=n._m_[i]; do+=n._o_[i]
                 DTT+=dTT; mat+=M; dif+=D; olp+=O; cnt+=cc
-                if M > Ave*O and val_(dTT, cr+O, TTw(_C.root,1),(len(N_)-1)*Lw) > 0:  # dTT is more precise? (use wTTC here?)
+                # should be TTw(_C) here? Or else it will be Ft.root?
+                if M > Ave*O and val_(dTT, cr+O, TTw(_C,1),(len(N_)-1)*Lw) > 0:  # dTT is more precise? (use wTTC here?)
                     C = sum2C(N_, _C, _i=None, root=Ft)
                     for n,m,o in zip(N_,m_,o_):
                         n.rN_ += [C]; n.m_+=[m]; n.o_+=[o]
@@ -517,7 +517,7 @@ def cluster_P(_C_,N_,root):  # Parallel centroid refining, _C_ from cluster_C, N
             dM+= sum(abs(_m-m) for _m,m in zip(N._m_,N.m_))
             dO+= sum(abs(_o-o) for _o,o in zip(N._o_,N.o_))
             M += sum(N.m_); O += sum(N.o_)
-        C_ = [sum2C(N_,_C, i, root=root.root) for i, _C in enumerate(_C_)]  # update with new coefs, _C.m, N->C refs
+        C_ = [sum2C(N_,_C, i, root=root) for i, _C in enumerate(_C_)]  # update with new coefs, _C.m, N->C refs
         Ave = ave * (root.r+Cw)
         if M > Ave*O and dM > Ave*dO:  # strong update
             for N in N_: N._m_,N._o_,N._d_,N._r_ = N.m_,N.o_,N.d_,N.r_
@@ -549,11 +549,9 @@ def sum2C(N_, _C, _i=None, root=None):  # fuzzy sum + base attrs for centroids
     R = 0; TT = np.zeros((2,9)); kern = np.zeros(4); span = 0; yx = np.zeros(2)
     for N, c in zip(N_,cc_):
         rc = c/ Cc; TT += N.dTT*rc; kern += N.kern*rc; span += N.span*rc; yx += N.yx*rc; R += N.r*rc
-    m,d = vt_(TT,R, TTw(root,1))  # wTTC
+    m,d = vt_(TT,R, TTw(root.root,1))  # wTTC
     C = CN(typ=3, Nt=CF(N_=N_), dTT=TT, m=m, d=d, c=Cc, r=R, yx=yx, kern=kern, span=span, root=root)
-    for i,TT in enumerate([C.dTT, C.Ct.dTT, C.TTn, C.TTc]):
-        if C.wTT_[i] is None: C.wTT_[i] = wTT_[i].copy()
-        cent_TT(TT, C.wTT_[i], R)
+    for i,TT in enumerate([C.dTT, C.Ct.dTT, C.TTn, C.TTc]): cent_TT(TT, C.wTT_[i], R)
     return C
 
 def sum2G(ft_, root=None, init=1, typ=None):
@@ -566,7 +564,7 @@ def sum2G(ft_, root=None, init=1, typ=None):
         if ft: n_,_,tt,c,r = ft; Ft_+= [CF(N_=n_,nF=nF,dTT=tt,m=(vt:=vt_(tt,r))[0],d=vt[1],c=c,r=r)]
         else:  Ft_ += [CF()]
     C_ = [c for N in ft_[0][0] for c in N.Ct.N_]
-    Ft_ += [Q2R(list(set(C_))) if C_ else CF()]
+    Ft_ += [Q2R(list(set(C_)),merge=1,froot=0) if C_ else CF()]  # C_ is prior layer's C (from N.Ct.N_, we shouldn't update their root?)
     G = comb_Ft(*Ft_, root)
     N_ = G.N_; N=N_[0]; G.sub = N.sub+1 if G.L_ else N.sub
     if typ is None: typ = N.typ  # obsolete?
@@ -656,7 +654,7 @@ def sum2F(N_, nF, root, TT=np.zeros((2,9)), C=0, R=0, fset=1, fCF=1):  # -> CF/C
     else: m,d,TT,C,R = sum_vt(N_,fm=1)
     Ft = (CN,CF)[fCF](nF=nF, dTT=TT,m=m,d=d,c=C,r=R, root=root); setattr(Ft,'N_',N_)   # root Bt|Ct ->CN
     if any([n.N_ for n in N_]):
-        sum_H(N_,Ft)  # sum lower levels, if any
+        sum_H([n for N in N_ for n in N.N_],Ft)  # sum lower levels, if any  (should be lower N_ only?)
     if fset:
         setattr(root, Ft.nF,Ft)
         for N in N_: N.root = Ft
