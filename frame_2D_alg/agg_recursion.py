@@ -101,7 +101,7 @@ def cross_comp(root, G_, m, c, r, nF='Nt'):  # agg+: refine by CC,exe -> cross_c
                 oF_[CoF.get().nF].V_ += [V]  # +-/ comp
                 if gv_(val_(TT,ttcN) * (c*wcN /(r*ccN)) * ((len(L_)-1)*wL) - ave):  # return +ve, store -ve gate Vs
                     e_ = get_exemplars({N for L in L_ for N in L.N_}, r,c)  # +ve Ls only
-                    return cluster_N(getattr(root,nF), e_,r,c)  # sum2G-> agg+
+                    cluster_N(getattr(root,nF), e_,r,c)  # sum2G-> agg+
 
 
 def comp_N_(pL_, r, tnF=None, root=2, fall=0):  # incremental-distance cross_comp, max dist depends on prior match
@@ -321,7 +321,7 @@ def cluster_N(Ft, _N_, _r,_c):  # flood-fill node | link clusters, flat, replace
                 F_ = list(set(F_)) or []; tt,fc,fr = sum_vt(F_,wTT=ttcN) if F_ else (np.zeros((2,9)),0,0)
                 ft_+= [[F_,nF,tt,fc,fr]]
             (_,_,nt,nc,nr),(_,_,lt,lc,lr),(_,_,bt,bc,br) = ft_
-            c = nc + lc + bc
+            c = nc + lc + bc  # lc is redundant? Since L.c is min of N.c and _N.c
             r = (nr*nc + lr*lc + br*bc) /c  # br includes overlap?
             tt= (nt*nc + lt*lc + bt*bc) /c  # tentative
             if gv_(val_(tt*Ft.root.wTT*ttcN) * (c*wcN /(r*ccN)) * ((len(N_)-1)*wL) - ave):  # apply Fw_ and Fc_ in every eval_?
@@ -337,16 +337,14 @@ def cluster_N(Ft, _N_, _r,_c):  # flood-fill node | link clusters, flat, replace
                 rG.dTT=TT; rG.c=C; rG.r=R; rG.m, rG.d = val_(TT, ttcC,fd=1)
             Ft.N_ = G_; Ft.dTT=TT; Ft.c=C; Ft.r=R; Ft.m, Ft.d = val_(TT,ttcC,fd=1)
     if G_: FV_(CoF.get(), *sum_vt(G_)[:-1],_r)
-    return G_,_r
 
 def cluster_C(Ft, E_,_r,_c):  # form centroids by clustering exemplar surround via rims of new member nodes, within root
 
     N_= copy(Ft.N_); _C_=[]  # revert if 0 clusters?
     for n in N_: n.root_, n._root_ = [],[]
     for i,E in enumerate(E_):
-        C = Copy_(E, Ft,init=1,cls=CL)
-        C.N_,C.L_,C.m_,C.d_ = [E],[],[1],[0]
-        E._root_+=[[C,1,0]]  # self (C,m,d)
+        C = sum2F([E], Ft, m_=[1], d_=[0])  # use sum2F for consistency?
+        E.root_ = []; E._root_+=[[C,1,0]]  # self (C,m,d)
         C._N_= list({n for l in E.rim for n in l.N_ if n is not E})  # init w for first loop eval
         _C_ += [C]
     out_ = []; r = _r
@@ -355,7 +353,6 @@ def cluster_C(Ft, E_,_r,_c):  # form centroids by clustering exemplar surround v
         for _C in _C_:  # C.m,d /rTT? sort / sum(_C.m_)?
             N__,n_,m_,d_,M,D,T,R,dTT,up = [],[],[],[],0,0,0,0, np.zeros((2,9)),0  # /C
             for n in _C.N_+_C._N_:  # current + frontier
-                if n not in N_: N_+=[n]; n.root_,n._root_ = [],[]
                 dtt,_ = base_comp(_C,n)  # or comp_N, decay?
                 m,d = val_(dtt,ttcC,1); dTT+=dtt
                 n_+=[n]; m_+=[m]; d_+=[d]; c=n.c; T+=c; M+=m*c; D+=abs(d)*c; R+=n.r*c  # scale totals only?
@@ -382,6 +379,8 @@ def cluster_C(Ft, E_,_r,_c):  # form centroids by clustering exemplar surround v
             _C_ = C_
         else: out_+=C_; break  # converged
     if out_:
+        CN_ = [N for C in out_ for N in C.N_]
+        rN_ = [N for N in N_ if N not in CN_]  # recycle non clustered Ns? or they will be skipped entirely?
         for n in [N for C in out_ for N in C.N_]:  # exemplar V + sum n match_dev to Cs, m* ||C rvals:
             n.exe = (n.d if n.typ==1 else n.m) + sum(rt[1] for rt in n.root_) > ave
         _m,_d,_tt,_c,_r = sum_vt(out_, fm=1)
@@ -395,7 +394,7 @@ def cluster_C(Ft, E_,_r,_c):  # form centroids by clustering exemplar surround v
                         m,d = nt_vt(*L.N_)
                         if m > ave * _r:  L_ += [L]
                         elif d > avd * _r: B_ += [L]
-                ft_ = [[C.N_,'Nt',C.dTT, C.c, C.r]]
+                ft_ = [[out.N_,'Nt',out.dTT, out.c, out.r]]
                 for i,(F_,nF) in enumerate(zip((L_,B_),('Lt','Bt'))):
                     F_ = list(set(F_)) or []; tt,fc,fr = sum_vt(F_,wTT=ttcC) if F_ else (np.zeros((2,9)),0,0)
                     ft_+= [[F_,nF,tt,fc,fr]]
@@ -439,7 +438,8 @@ def cluster_P(_C_, root):  # multi-seed mean shift: parallel centroid refine, _C
                     if l.m*wF > ave*(l.r+cF):
                         add2F(_C,C,2); removed += [C]; _C.m,_C.d = val_(_C.dTT,ttcP,fd=1)  # for next-loop base comp
                         for N in C.N_:
-                            for rt in N.root_: rt[0] = _C  # update root from C to _C, for olp computation below
+                            for rt in N.root_: 
+                                if rt[0] is C: rt[0] = _C  # update root from C to _C, for olp computation below
         _C_ = []; i_ = []  # for next loop
         for i, _C in enumerate(C_):
             if _C in removed: continue
