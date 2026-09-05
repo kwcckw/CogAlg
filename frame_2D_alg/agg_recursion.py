@@ -102,7 +102,7 @@ def cross_comp(root, G_, m, c, r, nF='Nt'):  # agg+: refine by CC,exe -> cross_c
                 if gv_(val_(TT,ttcN) * (c*wcN /(r*ccN)) * ((len(L_)-1)*wL) - ave):  # return +ve, store -ve gate Vs
                     e_ = get_exemplars({N for L in L_ for N in L.N_}, r,c)  # +ve Ls only
                     return cluster_N(getattr(root,nF), e_,r,c)  # sum2G-> agg+
-        
+
 
 def comp_N_(pL_, r, tnF=None, root=2, fall=0):  # incremental-distance cross_comp, max dist depends on prior match
 
@@ -111,7 +111,7 @@ def comp_N_(pL_, r, tnF=None, root=2, fall=0):  # incremental-distance cross_com
         if _N != N and fall or (m>0 and gv_(m * (lc*wN / (lr*cN)) - ave*(r+cN))):  # marginal -gV
         # comp if marginally predictable: proj surprise value?
             Link = comp_N(_N,N, lr,lc, full = not tnF, A=dy_dx, span=dist, rL=root)
-            # pending review: we no longer using rTT now? 
+            # pending review: we no longer using rTT now?
             Link.rTT = np.abs(pTT - Link.dTT) / eps_(Link.dTT)  # relative prediction error/oF, direction-agnostic
             L_+= [Link]; N_+= [_N,N]
             if _N.root_ and gv_(Link.m*wF- ave*(Link.r+cF)):
@@ -119,7 +119,7 @@ def comp_N_(pL_, r, tnF=None, root=2, fall=0):  # incremental-distance cross_com
                 for n in N.N_:
                     for rt in n.root_:  # [C,m,d]
                         if rt[0] is N: rt[0] = _N  # keep m,d positions
-                N.rim.remove(Link); Link.N_ = [_N,_N]  # replaces the merged N 
+                N.rim.remove(Link); Link.N_ = [_N,_N]  # replaces the merged N
                 for pt in pL_[i+1:]:  # dist, dy_dx, _N,N, lc,lr, pTT,m,d  (replaces in pL_)
                     if pt[2] is N: pt[2] = _N
                     elif pt[3] is N: pt[3] = _N
@@ -149,7 +149,7 @@ def comp_N(_N,N, r,c, full=1, A=None,span=None, rL=None):
         yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx
         box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
         angl = [np.zeros(2) if A is None else A, np.sign(TT[1] @ ttN_[1])]
-        L.yx=yx; L.box=box; L.span=span; L.angl=angl; L.kern=(_N.kern+N.kern)/2  
+        L.yx=yx; L.box=box; L.span=span; L.angl=angl; L.kern=(_N.kern+N.kern)/2
     else: TT = comp_derT(_N.dTT[1],N.dTT[1])
     m,d = val_(TT, ttN_,1); L.dTT,L.m,L.d = TT,m,d
     if N.typ > 1 and gv_(m* (c/r)* wN_ - ave*(r+cN_)):  # skip PPs, Nts?
@@ -332,7 +332,7 @@ def cluster_N(Ft, _N_, _r,_c):  # flood-fill node | link clusters, flat, replace
         for tt,c,gr in Gt_: w=c/C; TT+=tt*w; R+=gr*w
         if gv_(val_(TT*Ft.root.wTT*ttcN) * (C*wcN /(_r+R+ccN)) * ((len(G_)-1)*wL) - ave):  # reform root,Nt, no other forks yet:
             rG = Ft.root
-            if Ft.nF == "Nt": 
+            if Ft.nF == "Nt":
                 rG.H += [Copy_(Ft)]  # add H only for Nt?
                 rG.dTT=TT; rG.c=C; rG.r=R; rG.m, rG.d = val_(TT, ttcC,fd=1)
             Ft.N_ = G_; Ft.dTT=TT; Ft.c=C; Ft.r=R; Ft.m, Ft.d = val_(TT,ttcC,fd=1)
@@ -393,8 +393,8 @@ def cluster_C(Ft, E_,_r,_c):  # form centroids by clustering exemplar surround v
                 for N in out.N_:
                     for L in N.rim:
                         m,d = nt_vt(*L.N_)
-                        if m > ave * _r:  L_ += [L]   
-                        elif d > avd * _r: B_ += [L]    
+                        if m > ave * _r:  L_ += [L]
+                        elif d > avd * _r: B_ += [L]
                 ft_ = [[C.N_,'Nt',C.dTT, C.c, C.r]]
                 for i,(F_,nF) in enumerate(zip((L_,B_),('Lt','Bt'))):
                     F_ = list(set(F_)) or []; tt,fc,fr = sum_vt(F_,wTT=ttcC) if F_ else (np.zeros((2,9)),0,0)
@@ -427,7 +427,7 @@ def cluster_P(_C_, root):  # multi-seed mean shift: parallel centroid refine, _C
                 ddM_ += [_dM - dM]; ddM_ = ddM_[-5:]  # summed over last 5 loops
                 if sum(ddM_)<0: break  # break and preserve the last Cs before the divergence
                 conv = wcP*sum(ddM_) <= ave*(cnt+root.r+ccP)
-            _dM = dM         
+            _dM = dM
         else: conv = 1
         removed = []
         if gv_(O*wcP - ave*(root.r+ccP*L)):  # merge redundant Cs
@@ -781,7 +781,7 @@ def trace_edge(N_,_G_,_TT,_C, r,root):  # cluster contiguous shapes via PPs in e
                     n = L.N_[0] if L.N_[1] is _N else L.N_[1]
                     if n in N_:
                         if n.root is Gt: continue
-                        l_+=[L]  # default link 
+                        l_+=[L]  # default link
                         if n.fin:  # merge n root
                             _root = n.root; n_+=_root[0];l_+=_root[3]; _root[6]=1
                             for _n in _root[0]: _n.root = Gt
