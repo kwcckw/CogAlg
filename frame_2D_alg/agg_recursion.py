@@ -84,29 +84,48 @@ def cent_TT(dTT, r):  # EM-like weight attr matches | diffs by their match to th
 - feedback filter updates 
 '''
 def cross_comp(root, G_, m, c, r, nF='Nt'):  # agg+: refine by CC,exe -> cross_comp, nF: core|contour?
-    C__ = []; M = C = R = 0
-    for G in G_:
-        if gv_(G.m * ((G.c*wcC) / (G.r*ccC)) * ((len(G.N_)-1)*wL) - ave):
-            if Ct := cluster_C(G.Nt, get_exemplars(G.N_,r,c),r,c):  # refines, splits connectivity cluster
-                G.Ct = Ct; Ct.root = G    
-                C_, _m,_c,_r = Ct.N_,Ct.m,Ct.c,Ct.r
-                C__ += C_; M+=_m; C+=_c; R+=_r  # splice refined sub_G_s
-    if C__:
-        setattr(root,nF, sum2F(C__,root, nF=nF, froot=2)); L=len(C__); R/=L  # pass M,C,R in sum2F?
-        if gv_((m+M) * (c*(C+wN_) / (r*(R+cN_))) * ((L-1)*wL) - ave):
-            root.H += [Copy_(root)]  # lower agg lev
-            if Lt := comp_N_( proj_L_(combinations([F2N(C) for C in C__],2), root,R), R):
-                L_, TT, c, r, V = Lt
-                # include Ct here? The prior section in proj_N use Ct.Lt for projection?
-                # if hasattr(N.Ct,'Lt') and N.Ct.Lt:
-                #     for L in N.Ct.Lt.N_: proj_TT(L,cos_d,dist,L.r+_r,iTT,wTT,dec); c+=L.c
-                if nF == "Nt":  # optional for Nt only?
-                    root.Lt.N_=L_; root.Lt.dTT=TT; root.Lt.c=c; root.Lt.r=r; root.Lt.m,root.Lt.d=val_(TT,ttX,fd=1)
-                oF_[CoF.get().nF].V_ += [V]  # +-/ comp
-                if gv_(val_(TT,ttcN) * (c*wcN /(r*ccN)) * ((len(L_)-1)*wL) - ave):  # return +ve, store -ve gate Vs
-                    e_ = get_exemplars({N for L in L_ for N in L.N_}, r,c)  # +ve Ls only
-                    cluster_N(getattr(root,nF), e_,r,c)  # sum2G-> agg+
 
+    C__,g_ = [],[]; M= C= R= 0
+    for G in G_:
+        if gv_(G.m * ((G.c*wcC) / (G.r*ccC)) * ((len(G.N_)-1)*wL) - ave):  # prune G_ before call?
+            if Ct := cluster_C(G.Nt, get_exemplars(G.N_,r,c),r,c):  # centroids / G
+                C__+=Ct.N_; M+=Ct.m; C+=Ct.c; R+=Ct.r  # centroids / root
+        else: g_ += [G]
+    if med_ := list(dict.fromkeys(C.N_[np.argmax(C.m_)] for C in C__)):  # x-comp medoids: nodes with highest|>ave match to given C
+        # extend rng only, skip N pairs compared within their G:
+        if pairs := [(_N, N) for _N, N in combinations(med_,2) if not any(_N in L.N_ and N in L.N_ for L in _N.rim)]:
+            med_ = list(dict.fromkeys(N for P in pairs for N in P))
+            setattr(root,nF, sum2F(med_,root, nF=nF,froot=2)); L=len(med_); R/=L  # pass M,C,R?
+            if gv_((m+M) * (c*(C+wN_) / (r*(R+cN_))) * ((L-1)*wL) - ave):
+                root.H += [Copy_(root)]  # lower agg lev
+                if Lt := comp_N_( proj_L_(pairs, root,R), R):
+                    L_,TT,c,r,V = Lt
+                    if nF=="Nt": root.Lt.N_=L_; root.Lt.dTT=TT; root.Lt.c=c; root.Lt.r=r; root.Lt.m,root.Lt.d=val_(TT,ttX,fd=1)
+                    oF_[CoF.get().nF].V_ += [V]  # +-/ comp
+                    if gv_(val_(TT,ttcN) * (c*wcN /(r*ccN)) * ((len(L_)-1)*wL) - ave):  # return +ve, store -ve gate Vs
+                        e_ = get_exemplars({N for L in L_ for N in L.N_}, r,c)  # +ve Ls only
+                        cluster_N(getattr(root,nF), e_,r,c)  # sum2G -> agg+
+    # astra draft, not revised:
+    if (L := len(g_)) > 1:
+        TT, C, R = sum_vt(g_);
+        M = val_(TT, ttX)  # independent of medoid totals and link c,r
+        if gv_((m + M) * (c * (C + wN_) / (r * (R + cN_))) * ((L - 1) * wL) - ave):
+            if Lt := comp_N_(proj_L_(combinations(g_, 2), root, R), R):
+                lev = Copy_(root if nF == "Nt" else getattr(root, nF))  # preserve lower pass, including Nt links
+                Ft = CF(N_=g_, dTT=TT, c=C, r=R, m=M, nF=nF, root=root, wTT=root.wTT, H=[lev])
+                Ft.m, Ft.d = val_(TT, ttX, fd=1);
+                setattr(root, nF, Ft)
+                L_, TT, lc, lr, V = Lt
+                if nF == "Nt":
+                    root.Lt = CF(N_=L_, dTT=TT, c=lc, r=lr, nF="Lt", root=root, wTT=root.wTT)
+                    root.Lt.m, root.Lt.d = val_(TT, ttX, fd=1)
+                root.dTT, root.c, root.r = sum_vt([root.Nt, root.Lt, root.Bt])
+                root.m, root.d = val_(root.dTT, root.wTT, fd=1)
+                oF_[CoF.get().nF].V_ += [V]
+                if gv_(val_(TT, ttcN) * (lc * wcN / (lr * ccN)) * ((len(L_) - 1) * wL) - ave):
+                    e_ = get_exemplars({N for L in L_ for N in L.N_}, lr, lc)
+                    for G in g_: G.fin = 0
+                    cluster_N(Ft, e_, lr, lc)
 
 def comp_N_(pL_, r, tnF=None, root=2, fall=0):  # incremental-distance cross_comp, max dist depends on prior match
 
@@ -115,7 +134,6 @@ def comp_N_(pL_, r, tnF=None, root=2, fall=0):  # incremental-distance cross_com
         if _N != N and fall or (m>0 and gv_(m * (lc*wN / (lr*cN)) - ave*(r+cN))):  # marginal -gV
         # comp if marginally predictable: proj surprise value?
             Link = comp_N(_N,N, lr,lc, full = not tnF, A=dy_dx, span=dist, rL=root)
-            # pending review: we no longer using rTT now?
             Link.rTT = np.abs(pTT - Link.dTT) / eps_(Link.dTT)  # relative prediction error/oF, direction-agnostic
             L_+= [Link]; N_+= [_N,N]
             if _N.root_ and gv_(Link.m*wF- ave*(Link.r+cF)):
@@ -123,7 +141,7 @@ def comp_N_(pL_, r, tnF=None, root=2, fall=0):  # incremental-distance cross_com
                 for n in N.N_:
                     for rt in n.root_:  # [C,m,d]
                         if rt[0] is N: rt[0] = _N  # keep m,d positions
-                if Link in N.rim: N.rim.remove(Link)  # when full = 0, rim doesn't pack Link now
+                if Link in N.rim: N.rim.remove(Link)  # packed if full
                 Link.N_ = [_N,_N]  # replaces the merged N
                 for pt in pL_[i+1:]:  # dist, dy_dx, _N,N, lc,lr, pTT,m,d  (replaces in pL_)
                     if pt[2] is N: pt[2] = _N
@@ -174,7 +192,7 @@ def comp_N(_N,N, r,c, full=1, A=None,span=None, rL=None):
             [add_H(L.H, d.H, L) for d in dn_ if d.H]  # lower levs
             L.H += [sum2F(dn_,L)]  # top lev
         # merge if no or weak Bt?
-    if full: 
+    if full:
         for n, _n in (_N,N),(N,_N): n.rim += [L]
     FV_(CoF.get(), L.dTT, L.c, L.r)
     # or merge N -> _N?
@@ -337,16 +355,10 @@ def cluster_N(Ft, _N_, _r,_c):  # flood-fill node | link clusters, flat, replace
         for tt,c,gr in Gt_: w=c/C; TT+=tt*w; R+=gr*w
         if gv_(val_(TT*Ft.root.wTT*ttcN) * (C*wcN /(_r+R+ccN)) * ((len(G_)-1)*wL) - ave):  # reform root,Nt, no other forks yet:
             rG = Ft.root
-            if Ft.nF == "Nt":
-                rG.H += [Copy_(Ft)]  # add H only for Nt?
+            if Ft.nF == "Nt":  # concat C_ if Ct is hierarchical, same as Nt it maps to?
+                rG.H += [Copy_(Ft)]  # add H for Nt, also Ct?
                 rG.dTT=TT; rG.c=C; rG.r=R; rG.m, rG.d = val_(TT, ttcC,fd=1)
             Ft.N_ = G_; Ft.dTT=TT; Ft.c=C; Ft.r=R; Ft.m, Ft.d = val_(TT,ttcC,fd=1)
-            # combine C_:  This is redundant now since root.Ct will be assigned in cross_comp?
-            # C_ = [C for N in (G_ if G_ else _N_) for C in N.Ct.N_]
-            # if C_:
-            #     sum2F(C_, root=Ft.root.Ct)  # Ct.r includes overlap?
-            #     L_ = [L for C in C_ for L in C.L_]  # C-to-N links
-            #     if L_: Ft.root.Ct.Lt = sum2F(L_,root=Ft.root.Ct)      
     if G_: FV_(CoF.get(), *sum_vt(G_)[:-1],_r)
     return G_,_r
 
@@ -408,7 +420,7 @@ def cluster_C(Ft, E_,_r,_c):  # form centroids by clustering exemplar surround v
                         elif d > avd * _r: B_ += [L]
                 Ft_ = []
                 for i,(F_,nF) in enumerate(zip((out.N_, L_,B_),('Nt','Lt','Bt'))):  # or convert C into Nt?
-                    if F_: 
+                    if F_:
                         tt,c,r = sum_vt(F_,wTT=ttcC)
                         Ft_ += [CF(N_=F_,nF=nF,dTT=tt,m=(vt:=val_(tt,wTT,1))[0],d=vt[1],c=c,r=r)]
                     else: Ft_ += [CF()]
