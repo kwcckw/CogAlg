@@ -84,16 +84,43 @@ def cent_TT(dTT, r):  # EM-like weight attr matches | diffs by their match to th
 - feedback filter updates 
 '''
 def cross_comp(root, G_, m, c, r, nF='Nt'):  # agg+: refine by CC,exe -> cross_comp, nF: core|contour?
-
+    # draft:
+    def xcomp(N_, pairs, M,C,R):
+        if gv_((m+M) * (c*(C+wN_) / (r*(R+cN_))) * ((len(N_)-1)*wL) - ave):
+            if Lt := comp_N_(proj_L_(pairs,root,R),R):
+                lev = Copy_(root if nF=="Nt" else getattr(root,nF))
+                if nF!="Nt": lev.H = copy(getattr(root,nF).H)
+                TT,nc,nr = sum_vt(N_)  # fork values from this population
+                Ft = CF(N_=N_,dTT=TT,c=nc,r=nr,nF=nF,root=root,wTT=root.wTT,H=[lev])
+                Ft.m,Ft.d = val_(TT,ttX,fd=1); setattr(root,nF,Ft)
+                L_,TT,lc,lr,V = Lt
+                if nF=="Nt":
+                    root.Lt = CF(N_=L_,dTT=TT,c=lc,r=lr,nF="Lt",root=root,wTT=root.wTT)
+                    root.Lt.m,root.Lt.d = val_(TT,ttX,fd=1)
+                root.dTT,root.c,root.r = sum_vt([root.Nt,root.Lt,root.Bt])
+                root.m,root.d = val_(root.dTT,root.wTT,fd=1)
+                oF_[CoF.get().nF].V_ += [V]
+                if gv_(val_(TT,ttcN) * (lc*wcN /(lr*ccN)) * ((len(L_)-1)*wL) - ave):
+                    e_ = get_exemplars({N for L in L_ for N in L.N_}, lr,lc)
+                    for N in N_: N.fin=0
+                    cluster_N(Ft,e_,lr,lc)
     C__,g_ = [],[]; M= C= R= 0
-    for G in G_:
-        if gv_(G.m * ((G.c*wcC) / (G.r*ccC)) * ((len(G.N_)-1)*wL) - ave) and (Ct := cluster_C(G.Nt, get_exemplars(G.N_,r,c),r,c)):   # prune G_ before call?
+    for G in G_:  # or prune G_ before call?
+        if gv_(G.m * ((G.c*wcC) / (G.r*ccC)) * ((len(G.N_)-1)*wL) - ave and (Ct := cluster_C(G.Nt, get_exemplars(G.N_,r,c),r,c))):
             C__+=Ct.N_; M+=Ct.m; C+=Ct.c; R+=Ct.r  # centroids / root
         else: g_ += [G]  # fall back to G if not forming any Cs
-    med_ = list(set([C.N_[np.argmax(C.m_)] for C in C__]))  # x-comp medoids: nodes with highest|>ave match to given C
-    # extend rng only, skip N pairs compared within their G:
-    pairs = [(_N, N) for _N, N in combinations(med_,2) if not any(_N in L.N_ and N in L.N_ for L in _N.rim)]
-    med_ = list(set(N for P in pairs for N in P)) + g_
+
+    if med_ := list(dict.fromkeys(C.N_[np.argmax(C.m_)] for C in C__)):
+         if pairs := [(_N, N) for _N, N in combinations(med_, 2) if not any(_N in L.N_ and N in L.N_ for L in _N.rim)]:
+            med_ = list(dict.fromkeys(N for P in pairs for N in P))
+            xcomp(med_, pairs, M, C, R / len(med_))
+    if len(g_) > 1:
+        TT, C, R = sum_vt(g_)
+        xcomp(g_, combinations(g_, 2), val_(TT, ttX), C, R)
+    '''
+    old:
+    med_ = list(set([C.N_[np.argmax(C.m_)] for C in C__]))  # xcomp medoids: nodes with highest|>ave match to given C
+    pairs = [(_N, N) for _N, N in combinations(med_,2) if not any(_N in L.N_ and N in L.N_ for L in _N.rim)]  # rng+, skip N pairs compared in their G
     setattr(root,nF, sum2F(med_,root, nF=nF,froot=2)); L=len(med_); R/=L  # pass M,C,R?
     if gv_((m+M) * (c*(C+wN_) / (r*(R+cN_))) * ((L-1)*wL) - ave):
         root.H += [Copy_(root)]  # lower agg lev
@@ -104,28 +131,24 @@ def cross_comp(root, G_, m, c, r, nF='Nt'):  # agg+: refine by CC,exe -> cross_c
             if gv_(val_(TT,ttcN) * (c*wcN /(r*ccN)) * ((len(L_)-1)*wL) - ave):  # return +ve, store -ve gate Vs
                 e_ = get_exemplars({N for L in L_ for N in L.N_}, r,c)  # +ve Ls only
                 cluster_N(getattr(root,nF), e_,r,c)  # sum2G -> agg+ (cross_comp only in sum2G?)
-    # astra draft, not revised:
+    # astra draft, similar to med_:
     if (L := len(g_)) > 1:
-        TT, C, R = sum_vt(g_);
-        M = val_(TT, ttX)  # independent of medoid totals and link c,r
+        TT, C, R = sum_vt(g_); M = val_(TT, ttX)  # independent of medoid totals and link c,r
         if gv_((m + M) * (c * (C + wN_) / (r * (R + cN_))) * ((L - 1) * wL) - ave):
             if Lt := comp_N_(proj_L_(combinations(g_, 2), root, R), R):
                 lev = Copy_(root if nF == "Nt" else getattr(root, nF))  # preserve lower pass, including Nt links
                 Ft = CF(N_=g_, dTT=TT, c=C, r=R, m=M, nF=nF, root=root, wTT=root.wTT, H=[lev])
-                Ft.m, Ft.d = val_(TT, ttX, fd=1);
-                setattr(root, nF, Ft)
+                Ft.m, Ft.d = val_(TT, ttX, fd=1); setattr(root, nF, Ft)
                 L_, TT, lc, lr, V = Lt
                 if nF == "Nt":
-                    root.Lt = CF(N_=L_, dTT=TT, c=lc, r=lr, nF="Lt", root=root, wTT=root.wTT)
-                    root.Lt.m, root.Lt.d = val_(TT, ttX, fd=1)
-                root.dTT, root.c, root.r = sum_vt([root.Nt, root.Lt, root.Bt])
-                root.m, root.d = val_(root.dTT, root.wTT, fd=1)
+                    root.Lt = CF(N_=L_, dTT=TT, c=lc, r=lr, nF="Lt", root=root, wTT=root.wTT); root.Lt.m, root.Lt.d = val_(TT, ttX, fd=1)
+                root.dTT, root.c, root.r = sum_vt([root.Nt, root.Lt, root.Bt]); root.m, root.d = val_(root.dTT, root.wTT, fd=1)
                 oF_[CoF.get().nF].V_ += [V]
                 if gv_(val_(TT, ttcN) * (lc * wcN / (lr * ccN)) * ((len(L_) - 1) * wL) - ave):
                     e_ = get_exemplars({N for L in L_ for N in L.N_}, lr, lc)
                     for G in g_: G.fin = 0
                     cluster_N(Ft, e_, lr, lc)
-
+    '''
 def comp_N_(pL_, r, tnF=None, root=2, fall=0):  # incremental-distance cross_comp, max dist depends on prior match
 
     L_,N_,mrg_ = [],[],[]
@@ -426,7 +449,7 @@ def cluster_C(Ft, E_,_r,_c):  # form centroids by clustering exemplar surround v
                     else: Ft_ += [CF(nF=nF)]
                 G = comb_Ft(*Ft_, Ft, wTT=ttcC); G_ += [G]; G.m_ = out.m_; G.d_ = out.d_
             rG = Ft.root; Ct = sum2F(G_, rG, nF='Ct')
-            if rG.Ct: Ct.H += [rG.Ct]  # pack prior Ct to H if there's any
+            if rG.Ct: Ct.H += [rG.Ct]
             rG.Ct = Ct; Ct.root = rG
             return Ct
 
@@ -950,9 +973,9 @@ def ffeedback(frame, aTT,oTT, aL,oL):  # recompute filters from regime drift; fo
             # update nF_ and iF_:
             nF_ = [oF.fdef for oF in oF_]
             iF_.clear(); iF_.update({fd.name: i for i,fd in enumerate(nF_)})
-            for oF in oF_:  # even if oF was not modified, callees may be replaced
-                for n in call_sites(oF.fdef):
-                    if n.func.id in map_:  n.func.id = map_[n.func.id]
+            for oF in oF_:
+                for n in call_sites(oF.fdef):  # callees may be replaced
+                    if n.func.id in map_: n.func.id = map_[n.func.id]
             inject_oF_(oF_, globals())
 
     FV_(CoF.get(),dTT,dc,dr)
