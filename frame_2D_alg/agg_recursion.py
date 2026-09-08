@@ -85,19 +85,21 @@ def cent_TT(dTT, r):  # EM-like weight attr matches | diffs by their match to th
 '''
 def cross_comp(root, G_, m, c, r, nF='Nt'):  # agg+: refine by CC,exe -> cross_comp, nF: core|contour?
     # draft:
-    def xcomp(N_, pairs, M,C,R):
+    def xcomp(N_, pairs, M,C,R,nF):
         if gv_((m+M) * (c*(C+wN_) / (r*(R+cN_))) * ((len(N_)-1)*wL) - ave):
             if Lt := comp_N_(proj_L_(pairs,root,R),R):
-                lev = Copy_(root if nF=="Nt" else getattr(root,nF))
-                if nF!="Nt": lev.H = copy(getattr(root,nF).H)
+                ft = getattr(root,nF); lev = Copy_(ft)  # root is CN, we should copy Nt too?
+                # if nF!="Nt": lev.H = copy(getattr(root,nF).H)
                 TT,nc,nr = sum_vt(N_)  # fork values from this population
-                Ft = CF(N_=N_,dTT=TT,c=nc,r=nr,nF=nF,root=root,wTT=root.wTT,H=[lev])
-                Ft.m,Ft.d = val_(TT,ttX,fd=1); setattr(root,nF,Ft)
+                Ft = CF(N_=N_,dTT=TT,c=nc,r=nr,nF=nF,root=root,wTT=root.wTT,H=[lev]+ft.H)
+                Ft.m,Ft.d = val_(TT,ttX,fd=1); 
                 L_,TT,lc,lr,V = Lt
-                if nF=="Nt":
+                if nF=="Nt": 
                     root.Lt = CF(N_=L_,dTT=TT,c=lc,r=lr,nF="Lt",root=root,wTT=root.wTT)
-                    root.Lt.m,root.Lt.d = val_(TT,ttX,fd=1)
-                root.dTT,root.c,root.r = sum_vt([root.Nt,root.Lt,root.Bt])
+                if nF == 'Ct': setattr(root.Nt,'Ct',Ft)  # nF == Ct only when call xcomp with med_? or merge both 
+                else:          
+                    setattr(root,nF,Ft)
+                    root.dTT,root.c,root.r = sum_vt([root.Nt,root.Lt,root.Bt])
                 root.m,root.d = val_(root.dTT,root.wTT,fd=1)
                 oF_[CoF.get().nF].V_ += [V]
                 if gv_(val_(TT,ttcN) * (lc*wcN /(lr*ccN)) * ((len(L_)-1)*wL) - ave):
@@ -106,17 +108,17 @@ def cross_comp(root, G_, m, c, r, nF='Nt'):  # agg+: refine by CC,exe -> cross_c
                     cluster_N(Ft,e_,lr,lc)
     C__,g_ = [],[]; M= C= R= 0
     for G in G_:  # or prune G_ before call?
-        if gv_(G.m * ((G.c*wcC) / (G.r*ccC)) * ((len(G.N_)-1)*wL) - ave and (Ct := cluster_C(G.Nt, get_exemplars(G.N_,r,c),r,c))):
+        if gv_(G.m * ((G.c*wcC) / (G.r*ccC)) * ((len(G.N_)-1)*wL) - ave) and (Ct := cluster_C(G.Nt, get_exemplars(G.N_,r,c),r,c)):  # gv_ should exclude Ct
             C__+=Ct.N_; M+=Ct.m; C+=Ct.c; R+=Ct.r  # centroids / root
         else: g_ += [G]  # fall back to G if not forming any Cs
-
+    if len(g_) > 1:
+        TT, C, R = sum_vt(g_)
+        xcomp(g_, combinations(g_, 2), val_(TT, ttX), C, R, nF='Nt')
     if med_ := list(dict.fromkeys(C.N_[np.argmax(C.m_)] for C in C__)):
          if pairs := [(_N, N) for _N, N in combinations(med_, 2) if not any(_N in L.N_ and N in L.N_ for L in _N.rim)]:
             med_ = list(dict.fromkeys(N for P in pairs for N in P))
-            xcomp(med_, pairs, M, C, R / len(med_))
-    if len(g_) > 1:
-        TT, C, R = sum_vt(g_)
-        xcomp(g_, combinations(g_, 2), val_(TT, ttX), C, R)
+            xcomp(med_, pairs, M, C, R / len(med_),nF='Ct')
+    
     '''
     old:
     med_ = list(set([C.N_[np.argmax(C.m_)] for C in C__]))  # xcomp medoids: nodes with highest|>ave match to given C
@@ -153,7 +155,7 @@ def comp_N_(pL_, r, tnF=None, root=2, fall=0):  # incremental-distance cross_com
 
     L_,N_,mrg_ = [],[],[]
     for i, (dist, dy_dx, _N,N, lc,lr, pTT,m,_) in enumerate(pL_):  # pL is L = dist, dy_dx, _N,N if fall: not selective
-        if _N != N and fall or (m>0 and gv_(m * (lc*wN / (lr*cN)) - ave*(r+cN))):  # marginal -gV
+        if _N != N and fall or gv_(m * (lc*wN / (lr*cN)) - ave*(r+cN+N.sub+_N.sub)):  # marginal -gV
         # comp if marginally predictable: proj surprise value?
             Link = comp_N(_N,N, lr,lc, full = not tnF, A=dy_dx, span=dist, rL=root)
             Link.rTT = np.abs(pTT - Link.dTT) / eps_(Link.dTT)  # relative prediction error/oF, direction-agnostic
