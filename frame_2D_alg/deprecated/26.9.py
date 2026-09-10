@@ -451,3 +451,36 @@ def call_sites(fd):  # FunctionDef
     return [n for n in ast.walk(fd) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id in iF_]
 F_call_T_ = [[np.zeros((2,9)) for _ in call_sites(fd)] for fd in nF_]  # dTT computed per callee
 F_call_i_ = [{n.lineno: j for j,n in enumerate(call_sites(fd))} for fd in nF_]
+
+'''
+old:
+med_ = list(set([C.N_[np.argmax(C.m_)] for C in C__]))  # xcomp medoids: nodes with highest|>ave match to given C
+pairs = [(_N, N) for _N, N in combinations(med_,2) if not any(_N in L.N_ and N in L.N_ for L in _N.rim)]  # rng+, skip N pairs compared in their G
+setattr(root,nF, sum2F(med_,root, nF=nF,froot=2)); L=len(med_); R/=L  # pass M,C,R?
+if gv_((m+M) * (c*(C+wN_) / (r*(R+cN_))) * ((L-1)*wL) - ave):
+    root.H += [Copy_(root)]  # lower agg lev
+    if Lt := comp_N_( proj_L_(pairs, root,R), R):
+        L_,TT,c,r,V = Lt
+        if nF=="Nt": root.Lt.N_=L_; root.Lt.dTT=TT; root.Lt.c=c; root.Lt.r=r; root.Lt.m,root.Lt.d=val_(TT,ttX,fd=1)
+        oF_[CoF.get().nF].V_ += [V]  # +-/ comp
+        if gv_(val_(TT,ttcN) * (c*wcN /(r*ccN)) * ((len(L_)-1)*wL) - ave):  # return +ve, store -ve gate Vs
+            e_ = get_exemplars({N for L in L_ for N in L.N_}, r,c)  # +ve Ls only
+            cluster_N(getattr(root,nF), e_,r,c)  # sum2G -> agg+ (cross_comp only in sum2G?)
+# astra draft, similar to med_:
+if (L := len(g_)) > 1:
+    TT, C, R = sum_vt(g_); M = val_(TT, ttX)  # independent of medoid totals and link c,r
+    if gv_((m + M) * (c * (C + wN_) / (r * (R + cN_))) * ((L - 1) * wL) - ave):
+        if Lt := comp_N_(proj_L_(combinations(g_, 2), root, R), R):
+            lev = Copy_(root if nF == "Nt" else getattr(root, nF))  # preserve lower pass, including Nt links
+            Ft = CF(N_=g_, dTT=TT, c=C, r=R, m=M, nF=nF, root=root, wTT=root.wTT, H=[lev])
+            Ft.m, Ft.d = val_(TT, ttX, fd=1); setattr(root, nF, Ft)
+            L_, TT, lc, lr, V = Lt
+            if nF == "Nt":
+                root.Lt = CF(N_=L_, dTT=TT, c=lc, r=lr, nF="Lt", root=root, wTT=root.wTT); root.Lt.m, root.Lt.d = val_(TT, ttX, fd=1)
+            root.dTT, root.c, root.r = sum_vt([root.Nt, root.Lt, root.Bt]); root.m, root.d = val_(root.dTT, root.wTT, fd=1)
+            oF_[CoF.get().nF].V_ += [V]
+            if gv_(val_(TT, ttcN) * (lc * wcN / (lr * ccN)) * ((len(L_) - 1) * wL) - ave):
+                e_ = get_exemplars({N for L in L_ for N in L.N_}, lr, lc)
+                for G in g_: G.fin = 0
+                cluster_N(Ft, e_, lr, lc)
+'''
