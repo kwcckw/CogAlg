@@ -90,7 +90,8 @@ def cross_comp(root, G_, m, c, r, nF='Nt'):  # agg+: refine by CC,exe -> cross_c
             if Lt := comp_N_(proj_L_(pairs,root,R),R):
                 L_,TT,lc,lr,V = Lt; oF_[CoF.get().nF].V_ += [V]
                 if gv_(val_(TT,ttcN) * (lc*wcN /(lr*ccN)) * ((len(L_)-1)*wL) - ave):
-                    e_ = get_exemplars({N for L in L_ for N in L.N_}, lr,lc)
+                    N_ = {N for L in L_ for N in L.N_}; e_ = get_exemplars(N_, lr,lc)
+                    for N in N_: N.fin = 0; N.Rt = sum2F(N.rim);N.Rt.root = N  # only if N was added in trans-cluster?
                     return cluster_N(Ft,e_,lr,lc), L_
     C__,g_ = [],[]; M= C= R= 0
     for G in G_:  # or prune G_ before call?
@@ -298,14 +299,13 @@ def cluster_N(Ft, _N_, _r,_c):  # flood-fill node | link clusters, flat, replace
                 for tFt in lev.N_:  # Lt doesn't form trans-links
                     for tL in tFt.N_:
                         if tL.m*wcN > ave*ccN:  # merge trans_link.N_.roots
-                            rt0 = getattr(tL.N_[0].root,'root',None); rt1 = getattr(tL.N_[1].root,'root',None)  # CNs
+                            # N's root is Nt, so we need to get N.root.root
+                            rt0 = getattr(tL.N_[0].root,'root',None).root; rt1 = getattr(tL.N_[1].root,'root',None).root  # CNs
                             if rt0 and rt1 and rt0 != rt1:
                                 if rt1.H: add_H(rt0.H, rt1.H, rt0, fN=1)
                                 rt0.N_ += rt1.N_; add_Nt(rt0)  # recompute Nt attrs / G
                 L.Nt,L.Bt, L.Ct = CF(),CF(),CF()
             # merge roots
-    for N in _N_:
-        N.fin =0; N.exe=1; N.Rt = sum2F(N.rim);N.Rt.root = N  # only if N was added in trans-cluster?
     G_, Gt_, in_ = [],[],set()  # root attrs, add prelink pL_,pN_? include merged Cs, in feature space for Cs
     for N in _N_:  # form G per remaining N
         if N.fin or (Ft.root.root and not N.exe): continue  # no exemplars in Fg
@@ -569,7 +569,7 @@ def sum2G(ft_, fTT, root=None, init=1):  # core clustering function
     if G.Lt:  # sub+
         Lt = G.Lt; L_,lm,lc,lr = Lt.N_,Lt.m,Lt.c,Lt.r  # no levR = 1/len(L_): represented by c
         if gv_(lm*lc*wX - Av* (lr+1+cX)):  # mdecay(L_)-decay?
-            cross_comp(G, N_,lm,lc,lr, 'Nt')  # sub+, cross_comp
+            cross_comp(G, N_,lm,lc,lr, 'Nt')  # sub+, cross_comp  (may get endless recursion sum2G -> cross_comp -> cluster_N)
     if G.Bt:
         Bt = G.Bt; bd,bc,br = Bt.d,Bt.c,Bt.r; rroot = root.root if root.root else 0
         if N.typ!=1 and gv_(bd*bc*wX - Av*(br+1+cX)):  # no ddfork, eval len?
@@ -589,6 +589,7 @@ def comb_Ft(Nt, Lt, Bt, Ct, root,wTT):  # from sum2G, default Nt
     add2F(G,T, merge=2); add2F(G,Bt,merge=2)  # exclude Ct
     if any(dF_): sum2F(dF_,G.Xt)  # cross-fork covariance
     add_Nt(G)  # add kern,ext, doesn't affect comp_F
+    if (n_ := [n for N in G.N_ for n in N.N_]): G.H += [sum2F(n_, G)]
     if Lt:
         Link_ =Lt.N_; L_,pL_ = [],[]; [L_.append(L) if L.typ==1 else pL_.append(L) for L in Link_]
         if pL_ and sum_vt(pL_,fm=1,wTT=wTT)[0] *wN > ave*(cN * np.mean([L.r for L in pL_])):
