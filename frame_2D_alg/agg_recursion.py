@@ -94,24 +94,22 @@ def cross_comp(root, G_, m, c, r, nF='Nt'):  # agg+: refine by CC,exe -> cross_c
                     return cluster_N(Ft,e_,lr,lc), L_
     C__,g_ = [],[]; M= C= R= 0
     for G in G_:  # or prune G_ before call?
-        if gv_(G.m * ((G.c*wcC) / (G.r*ccC)) * ((len(G.N_)-1)*wL) - ave) and (Ct := cluster_C(G.Nt, get_exemplars(G.N_,r,c),r,c)):
+        if gv_(G.m * ((G.c*wcC)/(G.r*ccC)) * ((len(G.N_)-1)*wL) - ave) and (Ct:= cluster_C(G.Nt, get_exemplars(G.N_,r,c),r,c)):
             C__+= Ct.N_; M+=Ct.m; C+=Ct.c; R+=Ct.r  # centroids / root
         else: g_ += [G]  # fall back to G if not forming any Cs
     G_,L_ = [],[]
-    ft = getattr(root,nF); Ft = CF(nF=nF,root=root,wTT=root.wTT,H=[Copy_(ft)]+copy(ft.H))  # top level first? Which mean the other section need to use insert at 0 index?
+    ft = getattr(root,nF); Ft = CF(nF=nF, root=root,wTT=root.wTT, H=copy(ft.H)+[Copy_(ft)])
     if med_ := list(dict.fromkeys(C.N_[np.argmax(C.m_)] for C in C__)):
-         if pairs := [(_N, N) for _N, N in combinations(med_, 2) if not any(_N in L.N_ and N in L.N_ for L in _N.rim)]:
+         if pairs := [(_N,N) for _N,N in combinations(med_,2) if not any(_N in L.N_ and N in L.N_ for L in _N.rim)]:
             med_ = list(dict.fromkeys(N for P in pairs for N in P))
-            if out:= xcomp(Ft, med_, pairs, M,C, R/len(med_)): 
-                mG_, mL_ = out; G_ += mG_; L_ += mL_
-                for G in mG_: G.H += [[]]  # empty top lev
+            if GL_:= xcomp(Ft, med_, pairs, M,C, R/len(med_)):
+                G_,L_ = GL_
+                for G in G_: G.H+=[[]]  # medoids: top lev is unpacked
     if len(g_) > 1:
-        TT, C, R = sum_vt(g_)
-        if out := xcomp(Ft,g_,combinations(g_,2), val_(TT,ttX),C,R): gG_,gL_ = out; G_ += gG_; L_+=gL_
+        TT,C,R = sum_vt(g_)
+        if GL_:= xcomp(Ft,g_,combinations(g_,2), val_(TT,ttX),C,R): G_ += GL_[0]; L_ += GL_[1]
     if G_:  # combine mG_ and gG_
-        if nF=="Nt":  # L_ shouldn't be empty when G_ is not empty
-            TT,lc,lr = sum_vt(L_); Lt = CF(N_=L_,dTT=TT,c=lc,r=lr,nF="Lt",root=root,wTT=root.wTT)
-            Lt.m,Lt.d = val_(TT,ttX,fd=1); root.Lt = Lt
+        if nF=="Nt": TT,lc,lr = sum_vt(L_); root.Lt = Lt = CF(N_=L_,dTT=TT,c=lc,r=lr,nF="Lt",root=root,wTT=root.wTT); Lt.m,Lt.d = val_(TT,ttX,fd=1)
         Ft.N_ = G_; Ft.dTT,Ft.c,Ft.r = sum_vt(G_); Ft.m,Ft.d = val_(Ft.dTT,ttX,fd=1)
         setattr(root,nF,Ft)
         root.dTT,root.c,root.r = sum_vt([root.Nt,root.Lt,root.Bt]); root.m,root.d = val_(root.dTT,root.wTT,fd=1)
